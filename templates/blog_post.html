@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  {% set seo_title = post.title ~ " – SmarterFencing Blog" %}
+  {% set seo_description = (post.summary or (post.title ~ " on the SmarterFencing.AI blog about AI fencing analytics.")) %}
+  {% set seo_canonical = "https://smarterfencing.ai/blog/" ~ post.slug %}
+  {% set seo_og_type = "article" %}
+  {% set seo_json_ld %}
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": {{ post.title | tojson }},
+    "description": {{ (post.summary or post.title) | tojson }},
+    "datePublished": {{ (post.published_at.isoformat() if post.published_at else none) | tojson }},
+    "mainEntityOfPage": {{ ("https://smarterfencing.ai/blog/" ~ post.slug) | tojson }},
+    "author": {
+      "@type": "Organization",
+      "name": "SmarterFencing.AI"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "SmarterFencing.AI",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://smarterfencing.ai/static/brand/logo.png"
+      }
+    }
+  }
+  {% endset %}
+  {% include 'seo.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+  <style>
+    .blog-post-wrap { max-width: 720px; margin: 0 auto; padding: 24px 18px 72px; }
+    .blog-back { color: var(--brand-2); font-weight: 600; font-size: 0.9rem; }
+    .blog-post-wrap > h1 {
+      font-family: var(--font-display);
+      font-size: clamp(1.7rem, 4vw, 2.25rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 0 0 8px;
+      line-height: 1.25;
+      overflow: visible;
+      padding-bottom: 0.06em;
+    }
+    .blog-date { margin: 0 0 22px; color: var(--muted); font-size: 0.9rem; }
+    .blog-body { line-height: 1.65; color: rgba(238,241,245,0.88); }
+    .blog-body a { color: var(--brand-2); text-decoration: underline; }
+    .blog-body h2, .blog-body h3 { font-family: var(--font-display); color: var(--ink); }
+    .blog-hr { margin: 28px 0; border: 0; border-top: 1px solid var(--border); }
+    #likeBtn {
+      padding: 10px 14px; border-radius: 12px; cursor: pointer;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--ink);
+      font-family: var(--font-body); font-weight: 600;
+    }
+    #likeBtn:hover { border-color: var(--border-strong); }
+    .comment-block h3 {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      margin: 0 0 14px;
+    }
+    .comment-item {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .comment-item b { color: var(--ink); }
+    .comment-item p { margin: 6px 0 0; color: var(--muted); }
+    .comment-form input,
+    .comment-form textarea {
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 11px 13px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.28);
+      color: var(--ink);
+      font-family: var(--font-body);
+    }
+    .comment-form textarea { min-height: 110px; resize: vertical; }
+    .comment-form button {
+      padding: 10px 18px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), #a8e635);
+      color: var(--accent-ink);
+    }
+    #msg { margin-top: 10px; color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  {% include 'header.html' %}
+
+  <main class="blog-post-wrap">
+    <p style="margin: 0 0 16px;">
+      <a class="blog-back" href="{{ url_for('blog.blog_index') }}">← Back to blog</a>
+    </p>
+
+    <h1>{{ post.title }}</h1>
+
+    {% if post.published_at %}
+      <p class="blog-date">{{ post.published_at.date() }}</p>
+    {% endif %}
+
+    <article class="blog-body prose">
+      {{ post.body_html | safe }}
+    </article>
+
+    <hr class="blog-hr">
+
+    <section aria-label="Likes" style="display:flex; align-items:center; gap:12px;">
+      <button id="likeBtn" type="button">{{ "♥ Liked" if liked else "♡ Like" }}</button>
+      <span id="likeCount" style="color: var(--muted); font-size: 0.9rem;">{{ like_count }}</span>
+    </section>
+
+    <hr class="blog-hr">
+
+    <section class="comment-block" aria-label="Comments">
+      <h3>Comments</h3>
+      <div id="comments">
+        {% for c in comments %}
+          <div class="comment-item">
+            <b>{{ c.author_name }}</b>
+            <p>{{ c.body }}</p>
+          </div>
+        {% else %}
+          <p style="color: var(--muted);">No comments yet.</p>
+        {% endfor %}
+      </div>
+
+      <h3 style="margin-top: 28px;">Leave a comment</h3>
+      <div class="comment-form">
+        <input id="name" placeholder="Your name" maxlength="120" />
+        <textarea id="body" placeholder="Your comment" maxlength="2000"></textarea>
+        <button id="commentBtn" type="button">Submit</button>
+        <p id="msg"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='header.js') }}"></script>
+  <script>
+    document.getElementById('likeBtn').addEventListener('click', async () => {
+      const res = await fetch('/api/blog/{{ post.id }}/like', { method: 'POST' });
+      const data = await res.json();
+      document.getElementById('likeCount').textContent = data.like_count;
+      document.getElementById('likeBtn').textContent = data.liked ? '♥ Liked' : '♡ Like';
+    });
+
+    document.getElementById('commentBtn').addEventListener('click', async () => {
+      const payload = {
+        author_name: document.getElementById('name').value,
+        body: document.getElementById('body').value
+      };
+      const res = await fetch('/api/blog/{{ post.id }}/comments', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      document.getElementById('msg').textContent = data.message || data.error || 'Done';
+      if (data.success || data.message) {
+        setTimeout(() => window.location.reload(), 800);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    {% set seo_title = "Community Hub – SmarterFencing" %}
+    {% set seo_robots = "noindex,nofollow" %}
+    {% include 'seo.html' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: var(--font-body); }
+        .community-layout { display: grid; gap: 16px; }
+        @media (min-width: 900px) {
+            .community-layout.has-post { grid-template-columns: minmax(280px, 36%) 1fr; }
+        }
+        .post-list-item { cursor: pointer; transition: background 0.15s; }
+        .post-list-item:hover { background: rgba(255,255,255,0.06); }
+        .post-list-item.active { background: rgba(20, 184, 166, 0.14); border-color: rgba(45, 212, 191, 0.4); }
+        .comment-bubble { background: rgba(24, 30, 40, 0.85); }
+        .kind-badge {
+            display: inline-flex; align-items: center; border-radius: 0.375rem;
+            padding: 0.1rem 0.5rem; font-size: 0.66rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .kind-touch { background: rgba(200, 245, 66, 0.14); color: #eab308; }
+        .kind-highlight_reel { background: rgba(45, 212, 191, 0.18); color: #99f6e4; }
+        .kind-analysis { background: rgba(20, 184, 166, 0.22); color: #a7f3d0; }
+    </style>
+</head>
+<body class="min-h-screen text-white">
+    {% include 'header.html' %}
+
+    <main class="max-w-6xl mx-auto p-4 pt-4 lg:p-6">
+        <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h1 class="text-xl lg:text-2xl font-bold" style="font-family: var(--font-display); letter-spacing: -0.03em;">Community Hub</h1>
+                <p class="text-sm text-gray-400">Public touches, clips, and highlight reels — anyone can comment.</p>
+            </div>
+            <a href="/demo" class="text-sm text-emerald-400 hover:text-emerald-300">Analyze a video to share</a>
+        </header>
+
+        <div id="communityRoot" class="community-layout">
+            <section class="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+                    <span class="text-sm font-medium">Latest posts</span>
+                    <span id="postCount" class="text-xs text-gray-500"></span>
+                </div>
+                <div id="postList" class="max-h-[72vh] overflow-y-auto divide-y divide-gray-700/60">
+                    <p class="p-4 text-sm text-gray-500">Loading…</p>
+                </div>
+            </section>
+
+            <section id="postPanel" class="hidden bg-gray-800 rounded-xl border border-gray-700 overflow-hidden flex flex-col min-h-[420px]">
+                <div id="postHeader" class="p-4 border-b border-gray-700"></div>
+                <div id="postVideoWrap" class="p-4 border-b border-gray-700 hidden">
+                    <video id="resultsVideo" class="w-full rounded-lg bg-black max-h-72" controls playsinline preload="metadata"></video>
+                    <div id="touchClipControls" class="hidden flex flex-wrap items-center gap-2 mt-2">
+                        <button type="button" id="playTouchClipBtn" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium">Play touch</button>
+                        <span id="touchClipPhase" class="text-xs text-gray-400"></span>
+                    </div>
+                    <a id="postResultsLink" href="#" class="hidden inline-block mt-2 text-sm text-emerald-400 hover:text-emerald-300">Open full analysis →</a>
+                </div>
+                <div id="commentList" class="flex-1 overflow-y-auto p-4 space-y-3 min-h-[160px]"></div>
+                <form id="commentForm" class="p-4 border-t border-gray-700 flex flex-col gap-2">
+                    <textarea id="commentInput" rows="2" maxlength="4000" placeholder="Add a public comment…" class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm resize-y"></textarea>
+                    <div class="flex justify-between items-center">
+                        <span id="commentHint" class="text-xs text-gray-500"></span>
+                        <button type="submit" id="commentSubmit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium">Comment</button>
+                    </div>
+                </form>
+            </section>
+        </div>
+
+        <p id="communityEmpty" class="hidden mt-6 text-center text-gray-500 text-sm">No posts yet. Be the first — analyze a video, then post a touch or highlight reel.</p>
+    </main>
+
+    <script src="{{ url_for('static', filename='header.js') }}"></script>
+    <script src="{{ url_for('static', filename='touch-player.js') }}"></script>
+    <script>
+        const INITIAL_POST_ID = {{ post_id|tojson }};
+        let activePostId = null;
+        let isLoggedIn = false;
+
+        function apiFetch(url, opts = {}) {
+            return fetch(url, { ...opts, credentials: 'same-origin' });
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+
+        function formatWhen(iso) {
+            if (!iso) return '';
+            try {
+                return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            } catch (e) { return ''; }
+        }
+
+        function authorName(a) {
+            if (!a) return 'User';
+            return a.display_name || a.username || 'User';
+        }
+
+        function kindLabel(kind) {
+            if (kind === 'highlight_reel') return 'Reel';
+            if (kind === 'analysis') return 'Analysis';
+            return 'Touch';
+        }
+
+        function renderList(items) {
+            const el = document.getElementById('postList');
+            document.getElementById('postCount').textContent = items.length ? `${items.length} post${items.length === 1 ? '' : 's'}` : '';
+            if (!items.length) {
+                el.innerHTML = `<p class="p-4 text-sm text-gray-500">No posts yet.</p>`;
+                document.getElementById('communityEmpty').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('communityEmpty').classList.add('hidden');
+            el.innerHTML = items.map(item => `
+                <button type="button" class="post-list-item w-full text-left p-4 border-l-2 border-transparent ${item.id === activePostId ? 'active' : ''}" data-id="${esc(item.id)}">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <span class="kind-badge kind-${esc(item.kind)}">${esc(kindLabel(item.kind))}</span>
+                            ${item.touch_ref ? `<span class="ml-1 text-xs font-mono text-sky-400/90">${esc(item.touch_ref)}</span>` : ''}
+                        </div>
+                        ${item.can_delete || item.is_mine ? `<span class="text-[10px] uppercase tracking-wide text-teal-400/80 shrink-0">Yours</span>` : ''}
+                    </div>
+                    <p class="text-sm font-medium text-gray-100 mt-1 truncate">${esc(item.title)}</p>
+                    ${item.caption ? `<p class="text-xs text-gray-400 mt-0.5 line-clamp-2">${esc(item.caption)}</p>` : ''}
+                    <p class="text-xs text-gray-500 mt-1">@${esc((item.author && item.author.username) || 'user')} · ${esc(item.comment_count)} comment${item.comment_count === 1 ? '' : 's'}</p>
+                    <p class="text-[10px] text-gray-600 mt-0.5">${formatWhen(item.created_at)}</p>
+                </button>
+            `).join('');
+            el.querySelectorAll('[data-id]').forEach(btn => {
+                btn.addEventListener('click', () => openPost(btn.getAttribute('data-id')));
+            });
+        }
+
+        function clearPostPanel() {
+            activePostId = null;
+            history.replaceState({}, '', '/community');
+            document.getElementById('communityRoot').classList.remove('has-post');
+            document.getElementById('postPanel').classList.add('hidden');
+            document.getElementById('postHeader').innerHTML = '';
+            document.getElementById('postVideoWrap').classList.add('hidden');
+            document.getElementById('commentList').innerHTML = '';
+            document.querySelectorAll('.post-list-item').forEach(b => b.classList.remove('active'));
+            TouchClip.stopPlayback();
+        }
+
+        async function deletePost(postId) {
+            if (!postId) return;
+            const ok = window.confirm('Remove this post from the Community Hub? Comments will no longer be visible.');
+            if (!ok) return;
+            const res = await apiFetch(`/api/community/posts/${encodeURIComponent(postId)}`, {
+                method: 'DELETE',
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!data.success) {
+                alert(data.error || 'Could not delete post');
+                return;
+            }
+            if (activePostId === postId) clearPostPanel();
+            await loadList();
+        }
+
+        async function loadList() {
+            const res = await apiFetch('/api/community/posts');
+            const data = await res.json();
+            if (!data.success) throw new Error((data.error || 'Could not load') + (data.detail ? ` (${data.detail})` : ''));
+            renderList(data.posts || []);
+        }
+
+        async function openPost(postId) {
+            activePostId = postId;
+            history.replaceState({}, '', `/community/${postId}`);
+            document.getElementById('communityRoot').classList.add('has-post');
+            document.getElementById('postPanel').classList.remove('hidden');
+            document.getElementById('communityEmpty').classList.add('hidden');
+            document.querySelectorAll('.post-list-item').forEach(b => b.classList.toggle('active', b.dataset.id === postId));
+
+            const res = await apiFetch(`/api/community/posts/${encodeURIComponent(postId)}`);
+            const data = await res.json();
+            if (!data.success) {
+                document.getElementById('postHeader').innerHTML = `<p class="text-red-400 text-sm">${esc(data.error || 'Could not open post')}</p>`;
+                document.getElementById('postVideoWrap').classList.add('hidden');
+                document.getElementById('commentList').innerHTML = '';
+                return;
+            }
+
+            const post = data.post;
+            const media = data.media || {};
+            const canDelete = !!(data.can_delete || post.can_delete || post.is_mine);
+            document.getElementById('postHeader').innerHTML = `
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="kind-badge kind-${esc(post.kind)}">${esc(kindLabel(post.kind))}</span>
+                            ${post.touch_ref ? `<span class="text-xs font-mono text-sky-400/90">${esc(post.touch_ref)}</span>` : ''}
+                        </div>
+                        <p class="font-semibold mt-1">${esc(post.title)}</p>
+                        ${post.caption ? `<p class="text-sm text-gray-300 mt-1 whitespace-pre-wrap">${esc(post.caption)}</p>` : ''}
+                        <p class="text-xs text-gray-400 mt-1">Posted by @${esc((post.author && post.author.username) || 'user')} · ${formatWhen(post.created_at)}</p>
+                    </div>
+                    ${canDelete ? `<button type="button" id="deletePostBtn" class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-500/40 text-red-300 hover:bg-red-500/10 transition">Delete</button>` : ''}
+                </div>
+            `;
+            const deleteBtn = document.getElementById('deletePostBtn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    deletePost(post.id);
+                });
+            }
+
+            const video = document.getElementById('resultsVideo');
+            const wrap = document.getElementById('postVideoWrap');
+            const clipControls = document.getElementById('touchClipControls');
+            const resultsLink = document.getElementById('postResultsLink');
+            TouchClip.stopPlayback();
+            if (media.video_url) {
+                wrap.classList.remove('hidden');
+                video.src = media.video_url;
+                video.load();
+                if (post.kind === 'touch') {
+                    const touchId = media.touch_id || '';
+                    const fm = touchId.match(/frame(\d+)/);
+                    const frame = fm ? parseInt(fm[1], 10) : 0;
+                    clipControls.classList.remove('hidden');
+                    TouchClip.onTouchSelected(frame, media.fps || 30);
+                } else {
+                    clipControls.classList.add('hidden');
+                }
+                if (post.kind === 'analysis' && media.results_url) {
+                    resultsLink.href = media.results_url;
+                    resultsLink.classList.remove('hidden');
+                } else {
+                    resultsLink.classList.add('hidden');
+                }
+            } else {
+                wrap.classList.add('hidden');
+            }
+
+            renderComments(data.comments || []);
+        }
+
+        function renderComments(comments) {
+            const el = document.getElementById('commentList');
+            if (!comments.length) {
+                el.innerHTML = `<p class="text-sm text-gray-500">No comments yet. Start the conversation.</p>`;
+                return;
+            }
+            el.innerHTML = comments.map(c => {
+                const a = c.author || {};
+                const handle = a.username ? `@${a.username}` : '';
+                return `
+                    <div class="comment-bubble rounded-xl px-3 py-2 text-sm">
+                        <p class="text-[10px] text-gray-400 mb-1">${esc(authorName(a))}${handle ? ' ' + esc(handle) : ''} · ${formatWhen(c.created_at)}</p>
+                        <p class="whitespace-pre-wrap">${esc(c.body)}</p>
+                    </div>
+                `;
+            }).join('');
+            el.scrollTop = el.scrollHeight;
+        }
+
+        document.getElementById('playTouchClipBtn').addEventListener('click', () => {
+            TouchClip.playSelectedTouchClip();
+        });
+
+        document.getElementById('commentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!activePostId) return;
+            if (!isLoggedIn) {
+                window.location.href = '/demo#sign-in';
+                return;
+            }
+            const input = document.getElementById('commentInput');
+            const body = (input.value || '').trim();
+            if (!body) return;
+            const res = await apiFetch(`/api/community/posts/${encodeURIComponent(activePostId)}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ body }),
+            });
+            const data = await res.json();
+            if (!data.success) {
+                if (data.needs_username) {
+                    alert(data.error || 'Set a username first.');
+                    window.location.href = '/profile';
+                    return;
+                }
+                alert(data.error || 'Comment failed');
+                return;
+            }
+            input.value = '';
+            await openPost(activePostId);
+            await loadList();
+        });
+
+        function applyAuthState() {
+            const hint = document.getElementById('commentHint');
+            const submit = document.getElementById('commentSubmit');
+            const input = document.getElementById('commentInput');
+            if (isLoggedIn) {
+                hint.textContent = '';
+                submit.disabled = false;
+                input.disabled = false;
+                input.placeholder = 'Add a public comment…';
+            } else {
+                hint.innerHTML = '<a href="/demo#sign-in" class="text-emerald-400">Sign in</a> to comment';
+                input.disabled = true;
+                input.placeholder = 'Sign in to comment';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const me = await apiFetch('/api/auth/me');
+                const auth = await me.json();
+                isLoggedIn = !!auth.logged_in;
+            } catch (e) { isLoggedIn = false; }
+            applyAuthState();
+
+            try {
+                await loadList();
+                if (INITIAL_POST_ID) {
+                    await openPost(INITIAL_POST_ID);
+                } else if (window.innerWidth >= 900) {
+                    document.getElementById('communityEmpty').classList.remove('hidden');
+                }
+            } catch (err) {
+                document.getElementById('postList').innerHTML = `<p class="p-4 text-red-400 text-sm">${esc(err.message)}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>

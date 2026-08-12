@@ -1,0 +1,57 @@
+# ML runtime base: CUDA + conda + PyTorch + OpenMMLab (+ RTMDet/MotionBERT checkpoints).
+# Rebuild rarely — when PyTorch, CUDA, or mmcv/mmdet/mmpose versions change.
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# ---- System deps ----
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl git ffmpeg \
+    libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- Miniforge (conda-forge) ----
+RUN curl -fsSL https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -o /tmp/miniforge.sh \
+    && bash /tmp/miniforge.sh -b -p /opt/conda \
+    && rm -f /tmp/miniforge.sh
+
+ENV PATH=/opt/conda/bin:/opt/conda/envs/mmpose-env/bin:$PATH
+
+RUN conda config --set channel_priority strict \
+    && conda config --add channels conda-forge
+
+RUN conda create -y -n mmpose-env python=3.8 && conda clean -afy
+SHELL ["conda", "run", "-n", "mmpose-env", "/bin/bash", "-lc"]
+
+# ---- PyTorch CUDA 11.8 ----
+RUN conda install -y -n mmpose-env \
+    pytorch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 pytorch-cuda=11.8 \
+    -c pytorch -c nvidia \
+    && conda clean -afy
+
+# ---- Shared numeric / vision deps (pipeline + app) ----
+RUN pip install --no-cache-dir -U pip setuptools wheel \
+    && pip install --no-cache-dir \
+        numpy==1.24.3 \
+        opencv-python-headless \
+        pandas scipy shapely pycocotools \
+        timm easydict tensorboardX
+
+# ---- OpenMMLab stack ----
+RUN pip install --no-cache-dir -U openmim \
+    && mim install mmengine \
+    && mim install "mmcv==2.1.0" \
+    && mim install mmdet \
+    && mim install mmpretrain \
+    && mim install mmpose
+
+# ---- Bundled OpenMMLab checkpoints (RTMDet + MotionBERT) ----
+RUN mkdir -p /app/checkpoints \
+    && curl -fsSL -o /app/checkpoints/rtmdet_m_8xb32-100e_coco-obj365-person-235e8209.pth \
+        "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmdet_m_8xb32-100e_coco-obj365-person-235e8209.pth" \
+    && curl -fsSL -o /app/checkpoints/motionbert_ft_h36m-d80af323_20230531.pth \
+        "https://download.openmmlab.com/mmpose/v1/body_3d_keypoint/pose_lift/h36m/motionbert_ft_h36m-d80af323_20230531.pth"

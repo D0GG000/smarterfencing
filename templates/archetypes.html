@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    {% set seo_title = "Fencing Archetypes – SmarterFencing.AI" %}
+    {% set seo_description = "Explore fencing style archetypes derived from bout analytics on SmarterFencing.AI—patterns in touch location, attack mix, and tempo." %}
+    {% set seo_canonical = "https://smarterfencing.ai/archetypes" %}
+    {% include 'seo.html' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .arch-page {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 16px 16px 56px;
+        }
+        @media (min-width: 640px) {
+            .arch-page { padding: 28px 20px 72px; }
+        }
+        .arch-page .eyebrow {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: rgba(148, 163, 184, 0.9);
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .arch-page h1 {
+            font-family: Syne, ui-sans-serif, system-ui, sans-serif;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            font-size: clamp(1.75rem, 5vw, 2.35rem);
+            line-height: 1.25;
+            overflow: visible;
+            margin-bottom: 10px;
+            padding-bottom: 0.06em;
+        }
+        .arch-page .lead {
+            color: var(--muted);
+            font-size: 1rem;
+            line-height: 1.55;
+            margin-bottom: 28px;
+            max-width: 38rem;
+        }
+        .arch-card {
+            background:
+                radial-gradient(ellipse 70% 50% at 0% 0%, rgba(20, 184, 166, 0.1), transparent 55%),
+                linear-gradient(165deg, rgba(24, 30, 40, 0.95), rgba(14, 18, 26, 0.98));
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 22px 20px 24px;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow);
+            scroll-margin-top: calc(var(--header-h, 72px) + 12px);
+        }
+        .arch-card h2 {
+            font-family: Syne, ui-sans-serif, system-ui, sans-serif;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            font-size: clamp(1.35rem, 3.5vw, 1.65rem);
+            margin-bottom: 14px;
+            line-height: 1.25;
+            overflow: visible;
+            padding-bottom: 0.04em;
+        }
+        .arch-card .section-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--brand-2);
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .arch-card .style-copy {
+            color: rgba(226, 232, 240, 0.92);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 18px;
+        }
+        .arch-card .elite {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 14px;
+        }
+        .arch-card .elite-name {
+            font-weight: 700;
+            color: var(--ink);
+            margin-bottom: 4px;
+            font-size: 0.95rem;
+        }
+        .arch-card .elite-blurb {
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+        .arch-toc {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 28px;
+        }
+        .arch-toc a {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--ink);
+            text-decoration: none;
+            min-height: 40px;
+            display: inline-flex;
+            align-items: center;
+        }
+        .arch-toc a:hover { background: rgba(255, 255, 255, 0.08); }
+        .arch-footnote {
+            margin-top: 28px;
+            padding: 16px 18px;
+            border-radius: var(--radius);
+            border: 1px dashed rgba(255, 255, 255, 0.12);
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+        .arch-back {
+            display: inline-flex;
+            margin-bottom: 20px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-decoration: underline;
+        }
+        .arch-back:hover { color: var(--ink); }
+    </style>
+</head>
+<body>
+    {% include 'header.html' %}
+
+    <main class="arch-page">
+        <a class="arch-back" href="{{ url_for('demo.demo') }}">← Back to analyzer</a>
+        <p class="eyebrow">SmarterFencing styles</p>
+        <h1>Fencing archetypes</h1>
+        <p class="lead">
+            After an analysis, we classify each fencer’s scoring pattern into a style archetype.
+            Here’s what each one means — and an elite fencer who shares a similar approach.
+        </p>
+
+        <nav class="arch-toc" aria-label="Jump to archetype">
+            <a href="#duelist">The Duelist</a>
+            <a href="#sniper">The Sniper</a>
+            <a href="#bolt">The Bolt</a>
+            <a href="#tactician">The Tactician</a>
+            <a href="#hybrid">The Hybrid</a>
+        </nav>
+
+        <article class="arch-card" id="duelist">
+            <h2>⚔️ The Duelist</h2>
+            <p class="section-label">Style description</p>
+            <p class="style-copy">
+                You like to take control of the bout. Rather than waiting for opportunities, you create them.
+                Your fencing is built around initiative, commitment, and forcing your opponent to react.
+                When you find the right distance and timing, your attacks become your greatest weapon.
+            </p>
+            <div class="elite">
+                <p class="section-label">Similar elite fencer</p>
+                <p class="elite-name">Yannick Borel 🇫🇷</p>
+                <p class="elite-blurb">
+                    A powerful attacker known for explosive direct actions, strong initiative,
+                    and the ability to impose his rhythm on opponents.
+                </p>
+            </div>
+        </article>
+
+        <article class="arch-card" id="sniper">
+            <h2>🎯 The Sniper</h2>
+            <p class="section-label">Style description</p>
+            <p class="style-copy">
+                You are a patient hunter. Instead of forcing exchanges, you wait for the smallest mistake
+                and punish it with precision. Your strength comes from timing, distance, and knowing exactly when to strike.
+            </p>
+            <div class="elite">
+                <p class="section-label">Similar elite fencer</p>
+                <p class="elite-name">Max Heinzer 🇨🇭</p>
+                <p class="elite-blurb">
+                    Known for exceptional timing, counterattacking ability, and the ability to turn
+                    small openings into decisive touches.
+                </p>
+            </div>
+        </article>
+
+        <article class="arch-card" id="bolt">
+            <h2>⚡ The Bolt</h2>
+            <p class="section-label">Style description</p>
+            <p class="style-copy">
+                Speed is your advantage. You rely on sudden acceleration and explosive attacks to catch
+                opponents before they can react. Your fencing creates moments where opponents feel like
+                they have no time to adjust.
+            </p>
+            <div class="elite">
+                <p class="section-label">Similar elite fencer</p>
+                <p class="elite-name">Mohamed Elsayed 🇪🇬</p>
+                <p class="elite-blurb">
+                    An athletic and dynamic fencer known for fast attacks, aggressive movement,
+                    and explosive scoring actions.
+                </p>
+            </div>
+        </article>
+
+        <article class="arch-card" id="tactician">
+            <h2>♟️ The Tactician</h2>
+            <p class="section-label">Style description</p>
+            <p class="style-copy">
+                You solve the puzzle of the bout. Instead of relying on one favorite weapon, you adjust
+                your approach based on what your opponent gives you. Your greatest strength is versatility
+                and unpredictability.
+            </p>
+            <div class="elite">
+                <p class="section-label">Similar elite fencer</p>
+                <p class="elite-name">Gauthier Grumier 🇫🇷</p>
+                <p class="elite-blurb">
+                    Known for his tactical intelligence, adaptability, and ability to control bouts
+                    through careful decision-making.
+                </p>
+            </div>
+        </article>
+
+        <article class="arch-card" id="hybrid">
+            <h2>⚖️ The Hybrid</h2>
+            <p class="section-label">Style description</p>
+            <p class="style-copy">
+                You cannot be defined by one approach. You blend different styles together, switching
+                between attack, defense, and timing-based actions depending on what the bout demands.
+                Your unpredictability is your advantage.
+            </p>
+            <div class="elite">
+                <p class="section-label">Similar elite fencer</p>
+                <p class="elite-name">Koki Kano 🇯🇵</p>
+                <p class="elite-blurb">
+                    A complete fencer who combines technical precision, tactical awareness,
+                    and multiple scoring solutions.
+                </p>
+            </div>
+        </article>
+
+        <p class="arch-footnote">
+            Archetypes are based on the share of scoring touches from lunges, counters, and fleches
+            in a bout. Open a completed analysis to see your style reveal, then come back here to dig deeper.
+        </p>
+    </main>
+
+    <script src="{{ url_for('static', filename='header.js') }}"></script>
+</body>
+</html>

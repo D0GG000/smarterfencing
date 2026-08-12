@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Blog</title></head>
+<body>
+  <h1>Blog</h1>
+  {% for p in posts %}
+    <article>
+      <h2><a href="/blog/{{p.slug}}">{{ p.title }}</a></h2>
+      {% if p.summary %}<p>{{ p.summary }}</p>{% endif %}
+      <small>{{ p.published_at.date() if p.published_at else '' }}</small>
+    </article>
+    <hr>
+  {% endfor %}
+</body>
+</html>
+

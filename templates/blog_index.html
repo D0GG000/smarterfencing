@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  {% set seo_title = "SmarterFencing Blog – AI Fencing Analytics Build Log" %}
+  {% set seo_description = "Product notes, filming tips, and model updates from SmarterFencing.AI—the AI fencing analytics platform for bout video." %}
+  {% set seo_canonical = "https://smarterfencing.ai/blog" %}
+  {% include 'seo.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+  <style>
+    .blog-wrap { max-width: 720px; margin: 0 auto; padding: 28px 18px 72px; }
+    .blog-wrap h1 {
+      font-family: var(--font-display);
+      font-size: clamp(1.8rem, 4vw, 2.35rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 8px 0 28px;
+      line-height: 1.25;
+      overflow: visible;
+      padding-bottom: 0.06em;
+    }
+    .blog-post {
+      padding: 22px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .blog-post h2 {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
+    }
+    .blog-post h2 a:hover { color: var(--brand-2); }
+    .blog-post p { margin: 0 0 8px; color: var(--muted); line-height: 1.55; }
+    .blog-post small { color: var(--muted); opacity: 0.85; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  {% include 'header.html' %}
+  <main class="blog-wrap">
+    <h1>Build log</h1>
+    {% for p in posts %}
+      <article class="blog-post">
+        <h2>
+          <a href="{{ url_for('blog.blog_post', slug=p.slug) }}">{{ p.title }}</a>
+        </h2>
+        {% if p.summary %}
+          <p>{{ p.summary }}</p>
+        {% endif %}
+        <small>{{ p.published_at.date() if p.published_at else '' }}</small>
+      </article>
+    {% endfor %}
+  </main>
+  <script src="{{ url_for('static', filename='header.js') }}"></script>
+</body>
+</html>

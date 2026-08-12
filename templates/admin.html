@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% set seo_title = "Admin - SmarterFencing" %}
+    {% set seo_robots = "noindex,nofollow" %}
+    {% include 'seo.html' %}
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold mb-1">Admin Dashboard</h1>
+        <p class="text-sm text-gray-500 mb-6">App version {{ app_version }}</p>
+
+        <!-- Token Input -->
+        <div class="mb-6 bg-gray-800 rounded-lg p-4">
+            <label class="block text-sm text-gray-400 mb-2">Admin Token</label>
+            <div class="flex gap-2">
+                <input type="password" id="adminToken" placeholder="Enter admin token"
+                       class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg">
+                <button onclick="loadData()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium">
+                    Load Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Stats Summary -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Total Users</p>
+                <p id="totalUsers" class="text-2xl font-bold text-blue-400">-</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Users with Email</p>
+                <p id="usersWithEmail" class="text-2xl font-bold text-green-400">-</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Total Jobs</p>
+                <p id="totalJobs" class="text-2xl font-bold text-purple-400">-</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Jobs in Queue</p>
+                <p id="queuedJobs" class="text-2xl font-bold text-yellow-400">-</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Today's Jobs</p>
+                <p id="todayJobs" class="text-2xl font-bold text-orange-400">-</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Pending Comments</p>
+                <p id="pendingComments" class="text-2xl font-bold text-pink-400">-</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Anonymous Cleaned</p>
+                <p id="anonymousCleanedTotal" class="text-2xl font-bold text-teal-400">-</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Anonymous Queue</p>
+                <p id="anonymousEligible" class="text-2xl font-bold text-cyan-400">-</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Old Queue Jobs Cleaned (startup)</p>
+                <p id="staleJobsCleanedTotal" class="text-2xl font-bold text-amber-400">-</p>
+            </div>
+        </div>
+
+        <!-- Cleanup Actions -->
+        <div class="mb-6 flex flex-wrap gap-3 items-center">
+            <button onclick="cleanupEmptyUsers()"
+                    class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium">
+                Delete Users With No Jobs and No Email
+            </button>
+            <button onclick="resetAnonymousCleanupCounter()"
+                    class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm font-medium">
+                Reset Anonymous Cleanup Counter
+            </button>
+            <button onclick="resetStaleJobCleanupCounter()"
+                    class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm font-medium">
+                Reset Startup Cleanup Counter
+            </button>
+            <span id="cleanupStatus" class="text-sm text-gray-400"></span>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex gap-2 mb-4 flex-wrap">
+            <button onclick="showTab('queue')" id="tab-queue" class="px-4 py-2 bg-blue-600 rounded-lg">Queue</button>
+            <button onclick="showTab('users')" id="tab-users" class="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">Users</button>
+            <button onclick="showTab('jobs')" id="tab-jobs" class="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">All Jobs</button>
+            <button onclick="showTab('comments')" id="tab-comments" class="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">
+                Comments <span id="commentsBadge" class="ml-1 px-2 py-0.5 bg-pink-600 rounded-full text-xs hidden">0</span>
+            </button>
+        </div>
+
+        <!-- Queue Section -->
+        <div id="queue-section" class="bg-gray-800 rounded-lg overflow-hidden">
+            <!-- Currently Processing -->
+            <div class="border-b border-gray-700 p-4">
+                <h3 class="text-lg font-semibold text-blue-400 mb-3">Currently Processing</h3>
+                <div id="processingJob" class="text-gray-400">No job currently processing</div>
+                <div id="orphanProcessing" class="hidden mt-3"></div>
+            </div>
+
+            <!-- Queue Table -->
+            <div class="p-4 border-b border-gray-700">
+                <h3 class="text-lg font-semibold text-yellow-400 mb-3">Waiting in Queue</h3>
+                <table class="w-full">
+                    <thead class="bg-gray-700">
+                        <tr>
+                            <th class="text-left p-3 text-sm">Position</th>
+                            <th class="text-left p-3 text-sm">Job ID</th>
+                            <th class="text-left p-3 text-sm">User Email</th>
+                            <th class="text-left p-3 text-sm">Filename</th>
+                            <th class="text-left p-3 text-sm">File Size</th>
+                            <th class="text-left p-3 text-sm">Est. Wait</th>
+                            <th class="text-left p-3 text-sm">Queued At</th>
+                            <th class="text-left p-3 text-sm">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="queueTable">
+                        <tr><td colspan="8" class="p-4 text-center text-gray-500">Enter token and click Load Data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <div id="users-section" class="bg-gray-800 rounded-lg overflow-hidden hidden">
+            <table class="w-full">
+                <thead class="bg-gray-700">
+                    <tr>
+                        <th class="text-left p-3 text-sm">User ID</th>
+                        <th class="text-left p-3 text-sm">Email</th>
+                        <th class="text-left p-3 text-sm">Username</th>
+                        <th class="text-left p-3 text-sm">Jobs</th>
+                        <th class="text-left p-3 text-sm">Created</th>
+                        <th class="text-left p-3 text-sm">Last Seen</th>
+                        <th class="text-left p-3 text-sm">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTable">
+                    <tr><td colspan="7" class="p-4 text-center text-gray-500">Enter token and click Load Data</td></tr>
+                </tbody>
+            </table>
+
+            <div id="user-lookup-panel" class="border-t border-gray-700 p-4">
+                <h2 class="text-lg font-semibold text-sky-400 mb-2">User lookup &amp; cleanup</h2>
+                <p class="text-sm text-gray-400 mb-3">Search by email, username, or user ID. View all associated data and delete the user plus jobs, shares, comments, and storage.</p>
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <input type="text" id="userLookupQuery" placeholder="email@example.com, username, or user id"
+                           class="flex-1 min-w-[220px] px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm">
+                    <button onclick="lookupUser()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 rounded-lg text-sm font-medium">
+                        Look up
+                    </button>
+                </div>
+                <div id="userLookupMatches" class="hidden mb-4"></div>
+                <div id="userDetailPanel" class="hidden border-t border-gray-700 pt-4"></div>
+            </div>
+        </div>
+
+        <!-- Jobs Table -->
+        <div id="jobs-section" class="bg-gray-800 rounded-lg hidden">
+            <div class="overflow-x-auto">
+            <table class="w-full min-w-[720px]">
+                <thead class="bg-gray-700">
+                    <tr>
+                        <th class="text-left p-3 text-sm">Job ID</th>
+                        <th class="text-left p-3 text-sm whitespace-nowrap">Actions</th>
+                        <th class="text-left p-3 text-sm">User Email</th>
+                        <th class="text-left p-3 text-sm">Filename</th>
+                        <th class="text-left p-3 text-sm whitespace-nowrap">Status</th>
+                        <th class="text-left p-3 text-sm whitespace-nowrap">Created</th>
+                    </tr>
+                </thead>
+                <tbody id="jobsTable">
+                    <tr><td colspan="6" class="p-4 text-center text-gray-500">Enter token and click Load Data</td></tr>
+                </tbody>
+            </table>
+            </div>
+        </div>
+
+        <!-- Comments Section -->
+        <div id="comments-section" class="bg-gray-800 rounded-lg overflow-hidden hidden">
+            <div class="p-4 border-b border-gray-700">
+                <h3 class="text-lg font-semibold text-pink-400">Blog Comments</h3>
+                <p class="text-sm text-gray-400 mt-1">Comments grouped by user. Approve to show on blog.</p>
+            </div>
+            <div id="commentsContent" class="p-4">
+                <p class="text-gray-500">Enter token and click Load Data</p>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMsg" class="hidden mt-4 p-4 bg-red-900/50 border border-red-700 rounded-lg text-red-300"></div>
+    </div>
+
+    <script>
+        function showTab(tab) {
+            document.getElementById('queue-section').classList.toggle('hidden', tab !== 'queue');
+            document.getElementById('users-section').classList.toggle('hidden', tab !== 'users');
+            document.getElementById('jobs-section').classList.toggle('hidden', tab !== 'jobs');
+            document.getElementById('comments-section').classList.toggle('hidden', tab !== 'comments');
+
+            if (tab !== 'users') {
+                const detail = document.getElementById('userDetailPanel');
+                const matches = document.getElementById('userLookupMatches');
+                if (detail) detail.classList.add('hidden');
+                if (matches) matches.classList.add('hidden');
+            }
+
+            document.getElementById('tab-queue').classList.toggle('bg-blue-600', tab === 'queue');
+            document.getElementById('tab-queue').classList.toggle('bg-gray-700', tab !== 'queue');
+            document.getElementById('tab-users').classList.toggle('bg-blue-600', tab === 'users');
+            document.getElementById('tab-users').classList.toggle('bg-gray-700', tab !== 'users');
+            document.getElementById('tab-jobs').classList.toggle('bg-blue-600', tab === 'jobs');
+            document.getElementById('tab-jobs').classList.toggle('bg-gray-700', tab !== 'jobs');
+            document.getElementById('tab-comments').classList.toggle('bg-blue-600', tab === 'comments');
+            document.getElementById('tab-comments').classList.toggle('bg-gray-700', tab !== 'comments');
+        }
+
+        function getStatusBadge(status) {
+            const badges = {
+                'pending': '<span class="px-2 py-1 bg-gray-600 rounded text-xs">Pending</span>',
+                'queued': '<span class="px-2 py-1 bg-yellow-600 rounded text-xs">Queued</span>',
+                'processing': '<span class="px-2 py-1 bg-blue-600 rounded text-xs animate-pulse">Processing</span>',
+                'complete': '<span class="px-2 py-1 bg-green-600 rounded text-xs">Complete</span>',
+                'error': '<span class="px-2 py-1 bg-red-600 rounded text-xs">Error</span>'
+            };
+            return badges[status] || `<span class="px-2 py-1 bg-gray-600 rounded text-xs">${status || 'Unknown'}</span>`;
+        }
+
+        async function loadData() {
+            const token = document.getElementById('adminToken').value;
+            const errorEl = document.getElementById('errorMsg');
+            errorEl.classList.add('hidden');
+
+            if (!token) {
+                errorEl.textContent = 'Please enter admin token';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const limit = 500;
+                const tokenParam = `token=${encodeURIComponent(token)}`;
+
+                const [
+                    summaryRes,
+                    usersRes,
+                    jobsRes,
+                    commentsRes,
+                    cleanupStatsRes,
+                    staleJobStatsRes,
+                    queueLiveRes,
+                ] = await Promise.all([
+                    fetch(`/api/admin/summary?${tokenParam}`),
+                    fetch(`/api/admin/users?${tokenParam}&limit=${limit}`),
+                    fetch(`/api/admin/jobs?${tokenParam}&limit=${limit}`),
+                    fetch(`/api/admin/comments?${tokenParam}&limit=200`),
+                    fetch(`/api/admin/anonymous-user-cleanup-stats?${tokenParam}`),
+                    fetch(`/api/admin/stale-job-cleanup-stats?${tokenParam}`),
+                    fetch(`/api/admin/queue-live?${tokenParam}`),
+                ]);
+
+                if (!summaryRes.ok && !usersRes.ok) throw new Error('Invalid token or unauthorized');
+
+                const summary = summaryRes.ok ? await summaryRes.json() : null;
+                const usersData = usersRes.ok ? await usersRes.json() : { total: '-', users: [] };
+                const jobsData = jobsRes.ok ? await jobsRes.json() : { total: '-', jobs: [] };
+                const commentsData = commentsRes.ok ? await commentsRes.json() : { comments: [] };
+                const cleanupStats = cleanupStatsRes.ok
+                    ? await cleanupStatsRes.json()
+                    : { cleaned_total: '-', eligible_remaining: '-' };
+                const staleJobStats = staleJobStatsRes.ok
+                    ? await staleJobStatsRes.json()
+                    : { stale_jobs_cleaned_total: '-' };
+                const queueLive = queueLiveRes.ok
+                    ? await queueLiveRes.json()
+                    : {
+                        live_processing: null,
+                        orphan_processing: [],
+                        active_queue: [],
+                    };
+
+                const waitingJobs = queueLive.active_queue || [];
+                const processingJob = queueLive.live_processing || null;
+
+                // Update stats (from fast summary query when available)
+                document.getElementById('totalUsers').textContent =
+                    summary?.total_users ?? usersData.total;
+                document.getElementById('usersWithEmail').textContent =
+                    summary?.users_with_email ??
+                    usersData.users.filter(u => u.email).length;
+                document.getElementById('totalJobs').textContent =
+                    summary?.total_jobs ?? jobsData.total;
+                document.getElementById('queuedJobs').textContent =
+                    waitingJobs.length + (processingJob ? 1 : 0);
+
+                document.getElementById('todayJobs').textContent =
+                    summary?.today_jobs ??
+                    jobsData.jobs.filter(j => j.created_at && j.created_at.startsWith(new Date().toISOString().split('T')[0])).length;
+
+                const pendingCount = summary?.pending_comments ??
+                    (commentsData.comments ? commentsData.comments.filter(c => !c.approved).length : 0);
+                document.getElementById('pendingComments').textContent = pendingCount;
+                document.getElementById('anonymousCleanedTotal').textContent =
+                    cleanupStats.cleaned_total ?? '-';
+                document.getElementById('anonymousEligible').textContent =
+                    cleanupStats.eligible_remaining ?? '-';
+                document.getElementById('staleJobsCleanedTotal').textContent =
+                    staleJobStats.stale_jobs_cleaned_total ?? '-';
+
+                // Update comments badge
+                const badge = document.getElementById('commentsBadge');
+                if (pendingCount > 0) {
+                    badge.textContent = pendingCount;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+
+                // Render currently processing job
+                if (processingJob) {
+                    const fileSizeStr = processingJob.file_size
+                        ? `${(processingJob.file_size / (1024*1024)).toFixed(1)} MB`
+                        : 'Unknown size';
+                    document.getElementById('processingJob').innerHTML = `
+                        <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+                            <div class="flex items-center gap-3">
+                                <div class="animate-spin w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+                                <div class="flex-1">
+                                    <div class="font-medium">${processingJob.filename || 'Processing...'}</div>
+                                    <div class="text-sm text-gray-400">
+                                        Job ID: ${processingJob.job_id} |
+                                        User: ${processingJob.user_email || '<span class="text-gray-500">No email</span>'} |
+                                        Size: ${fileSizeStr}
+                                    </div>
+                                </div>
+                                <button onclick="openVideo('${processingJob.job_id}')"
+                                        class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">
+                                    View Video
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('processingJob').innerHTML = '<div class="text-gray-500">No job currently processing</div>';
+                }
+
+                const orphanEl = document.getElementById('orphanProcessing');
+                const orphans = queueLive.orphan_processing || [];
+                if (orphans.length) {
+                    orphanEl.classList.remove('hidden');
+                    orphanEl.innerHTML = `
+                        <div class="bg-orange-900/20 border border-orange-700 rounded-lg p-3 text-sm text-orange-200">
+                            <strong>DB says processing but worker is idle:</strong>
+                            ${orphans.map(o => o.job_id).join(', ')}
+                            (worker idle — re-queued on next startup)
+                        </div>`;
+                } else {
+                    orphanEl.classList.add('hidden');
+                    orphanEl.innerHTML = '';
+                }
+
+                // Render queue table (active waiting jobs only)
+                const queueHtml = waitingJobs.map((j, index) => `
+                    <tr class="border-t border-gray-700 hover:bg-gray-700/50">
+                        <td class="p-3">
+                            <span class="px-2 py-1 bg-yellow-600/30 text-yellow-400 rounded text-sm font-medium">
+                                #${index + 1}
+                            </span>
+                        </td>
+                        <td class="p-3 font-mono text-xs">${j.job_id}</td>
+                        <td class="p-3">${j.user_email || '<span class="text-gray-500">No email</span>'}</td>
+                        <td class="p-3 text-sm">${j.filename || '-'}${j.status_note === 'pending_upload' ? ' <span class="text-xs text-gray-500">(upload only)</span>' : ''}</td>
+                        <td class="p-3 text-sm">${formatFileSize(j.file_size)}</td>
+                        <td class="p-3 text-sm">${formatEstWait(j.file_size, index, waitingJobs)}</td>
+                        <td class="p-3 text-sm text-gray-400">${formatDate(j.queued_at || j.created_at)}</td>
+                        <td class="p-3">
+                            <button onclick="deleteJob('${j.job_id}')"
+                                    class="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-xs">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+                document.getElementById('queueTable').innerHTML = queueHtml || '<tr><td colspan="8" class="p-4 text-center text-gray-500">Queue is empty</td></tr>';
+
+                // Render users table
+                const usersHtml = usersData.users.map(u => `
+                    <tr class="border-t border-gray-700 hover:bg-gray-700/50">
+                        <td class="p-3 font-mono text-xs">${u.id.substring(0, 8)}...</td>
+                        <td class="p-3">${u.email || '<span class="text-gray-500">-</span>'}</td>
+                        <td class="p-3">${u.username ? '@' + escapeHtml(u.username) : '<span class="text-gray-500">-</span>'}</td>
+                        <td class="p-3">${u.job_count}</td>
+                        <td class="p-3 text-sm text-gray-400">${formatDate(u.created_at)}</td>
+                        <td class="p-3 text-sm text-gray-400">${formatDate(u.last_seen)}</td>
+                        <td class="p-3">
+                            <button onclick="loadUserDetail('${u.id}')"
+                                    class="px-2 py-1 bg-sky-600 hover:bg-sky-500 rounded text-xs">
+                                View all
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+                document.getElementById('usersTable').innerHTML = usersHtml || '<tr><td colspan="7" class="p-4 text-center text-gray-500">No users yet</td></tr>';
+
+                // Render jobs table with status and actions
+                Object.keys(adminJobsById).forEach((key) => { delete adminJobsById[key]; });
+                (jobsData.jobs || []).forEach((j) => { adminJobsById[j.job_id] = j; });
+                const jobsHtml = jobsData.jobs.map(j => `
+                    <tr class="border-t border-gray-700 hover:bg-gray-700/50">
+                        <td class="p-3 font-mono text-xs max-w-[9rem] truncate" title="${escapeHtml(j.job_id)}">${escapeHtml(j.job_id)}</td>
+                        <td class="p-3 whitespace-nowrap">
+                            <div class="flex flex-wrap gap-1">
+                                <button onclick="openVideo('${j.job_id}')"
+                                        class="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs">
+                                    Video
+                                </button>
+                                ${j.status === 'complete' ? `
+                                <button onclick="openResults('${j.job_id}')"
+                                        class="px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-xs">
+                                    Results
+                                </button>
+                                ` : ''}
+                                <button onclick="assignJobUser('${j.job_id}')"
+                                        class="px-2 py-1 bg-amber-600 hover:bg-amber-700 rounded text-xs"
+                                        ${j.status === 'processing' ? 'disabled title="Cannot reassign while processing"' : ''}>
+                                    Assign
+                                </button>
+                                <button onclick="deleteJob('${j.job_id}')"
+                                        class="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-xs"
+                                        ${j.status === 'processing' ? 'disabled title="Cannot delete while processing"' : ''}>
+                                    Delete
+                                </button>
+                            </div>
+                        </td>
+                        <td class="p-3 max-w-[10rem] truncate" title="${escapeHtml(j.user_email || j.username || j.user_id || '')}">${j.user_email ? escapeHtml(j.user_email) : (j.username ? '@' + escapeHtml(j.username) : '<span class="text-gray-500 font-mono text-xs">' + escapeHtml((j.user_id || '-').substring(0, 8)) + '…</span>')}</td>
+                        <td class="p-3 text-sm max-w-[10rem] truncate" title="${escapeHtml(j.filename || '')}">${escapeHtml(j.filename || '-')}</td>
+                        <td class="p-3 whitespace-nowrap">${getStatusBadge(j.status)}</td>
+                        <td class="p-3 text-sm text-gray-400 whitespace-nowrap">${formatDate(j.created_at)}</td>
+                    </tr>
+                `).join('');
+                document.getElementById('jobsTable').innerHTML = jobsHtml || '<tr><td colspan="6" class="p-4 text-center text-gray-500">No jobs yet</td></tr>';
+
+                // Render comments grouped by user
+                renderComments(commentsData.comments || []);
+
+            } catch (e) {
+                errorEl.textContent = e.message;
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        function renderComments(comments) {
+            if (!comments.length) {
+                document.getElementById('commentsContent').innerHTML = '<p class="text-gray-500">No comments yet</p>';
+                return;
+            }
+
+            // Group comments by user_id
+            const groupedByUser = {};
+            comments.forEach(c => {
+                const key = c.user_id || 'anonymous';
+                if (!groupedByUser[key]) {
+                    groupedByUser[key] = {
+                        user_id: c.user_id,
+                        user_email: c.user_email,
+                        comments: []
+                    };
+                }
+                groupedByUser[key].comments.push(c);
+            });
+
+            let html = '';
+            for (const key of Object.keys(groupedByUser)) {
+                const group = groupedByUser[key];
+                const userDisplay = group.user_email
+                    ? `<span class="text-green-400">${group.user_email}</span>`
+                    : `<span class="text-gray-500">User ${group.user_id ? group.user_id.substring(0, 8) + '...' : 'Anonymous'}</span>`;
+
+                html += `
+                    <div class="mb-6 border border-gray-700 rounded-lg overflow-hidden">
+                        <div class="bg-gray-700/50 px-4 py-2 flex items-center gap-2">
+                            <span class="text-sm font-medium">${userDisplay}</span>
+                            <span class="text-xs text-gray-400">(${group.comments.length} comment${group.comments.length > 1 ? 's' : ''})</span>
+                        </div>
+                        <div class="divide-y divide-gray-700">
+                            ${group.comments.map(c => `
+                                <div class="p-4 ${c.approved ? 'bg-green-900/10' : 'bg-yellow-900/10'}">
+                                    <div class="flex items-start justify-between gap-4">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2 mb-1">
+                                                <span class="font-medium">${escapeHtml(c.author_name)}</span>
+                                                <span class="text-xs text-gray-500">on "${escapeHtml(c.post_title)}"</span>
+                                                ${c.approved
+                                                    ? '<span class="px-2 py-0.5 bg-green-600 rounded text-xs">Approved</span>'
+                                                    : '<span class="px-2 py-0.5 bg-yellow-600 rounded text-xs">Pending</span>'
+                                                }
+                                            </div>
+                                            <p class="text-sm text-gray-300">${escapeHtml(c.body)}</p>
+                                            <p class="text-xs text-gray-500 mt-1">${formatDate(c.created_at)}</p>
+                                        </div>
+                                        <div class="flex gap-1">
+                                            ${!c.approved ? `
+                                                <button onclick="approveComment(${c.id})"
+                                                        class="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs">
+                                                    Approve
+                                                </button>
+                                            ` : `
+                                                <button onclick="unapproveComment(${c.id})"
+                                                        class="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 rounded text-xs">
+                                                    Unapprove
+                                                </button>
+                                            `}
+                                            <button onclick="deleteComment(${c.id})"
+                                                    class="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-xs">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            document.getElementById('commentsContent').innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function approveComment(commentId) {
+            const token = document.getElementById('adminToken').value;
+            try {
+                const res = await fetch(`/api/admin/comments/${commentId}/approve?token=${encodeURIComponent(token)}`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadData(); // Refresh
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function unapproveComment(commentId) {
+            const token = document.getElementById('adminToken').value;
+            try {
+                const res = await fetch(`/api/admin/comments/${commentId}/unapprove?token=${encodeURIComponent(token)}`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadData(); // Refresh
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function deleteComment(commentId) {
+            const token = document.getElementById('adminToken').value;
+            if (!confirm('Delete this comment? This cannot be undone.')) return;
+
+            try {
+                const res = await fetch(`/api/admin/comments/${commentId}?token=${encodeURIComponent(token)}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadData(); // Refresh
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        function formatDate(isoString) {
+            if (!isoString) return '-';
+
+            // Ensure the date is parsed as UTC (add 'Z' if missing)
+            let dateStr = isoString;
+            if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
+                dateStr += 'Z';
+            }
+
+            const d = new Date(dateStr);
+
+            return d.toLocaleString('en-US', {
+                timeZone: 'America/Los_Angeles',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes) return '<span class="text-gray-500">-</span>';
+            const mb = bytes / (1024 * 1024);
+            if (mb < 1) {
+                return `${(bytes / 1024).toFixed(1)} KB`;
+            }
+            return `${mb.toFixed(1)} MB`;
+        }
+
+        function formatEstWait(fileSize, index, waitingJobs) {
+            // Calculate total file size of jobs ahead (including processing job if any)
+            let totalBytes = 0;
+
+            // Add file sizes of jobs ahead in the waiting queue
+            for (let i = 0; i < index; i++) {
+                totalBytes += waitingJobs[i].file_size || (50 * 1024 * 1024); // Default 50MB if unknown
+            }
+
+            // Processing rate: ~5 MB per minute
+            const mbPerMinute = 5.0;
+            const totalMB = totalBytes / (1024 * 1024);
+            let estMinutes = Math.round(totalMB / mbPerMinute);
+
+            if (index === 0) {
+                return '<span class="text-green-400">Next up</span>';
+            }
+
+            if (estMinutes < 1) estMinutes = 1;
+
+            if (estMinutes >= 60) {
+                const hours = Math.floor(estMinutes / 60);
+                const mins = estMinutes % 60;
+                return `~${hours}h ${mins}m`;
+            }
+
+            return `~${estMinutes} min`;
+        }
+
+        async function openVideo(jobId) {
+            const token = document.getElementById('adminToken').value;
+
+            // Open window immediately (on user click) to avoid popup blocker
+            const win = window.open('about:blank', '_blank');
+
+            try {
+                const res = await fetch(`/api/admin/video-url/${jobId}?token=${encodeURIComponent(token)}`);
+                const data = await res.json();
+                if (data.url) {
+                    win.location.href = data.url;
+                } else {
+                    win.close();
+                    alert('Could not get video URL: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                win.close();
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function openResults(jobId) {
+            const token = document.getElementById('adminToken').value;
+
+            // Open window immediately (on user click) to avoid popup blocker
+            const win = window.open('about:blank', '_blank');
+
+            try {
+                const res = await fetch(`/api/admin/result-url/${jobId}?token=${encodeURIComponent(token)}`);
+                const data = await res.json();
+                if (data.url) {
+                    win.location.href = data.url;
+                } else {
+                    win.close();
+                    alert('Could not get result URL: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                win.close();
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function cleanupEmptyUsers() {
+            const token = document.getElementById('adminToken').value;
+            if (!token) {
+                alert('Enter admin token first');
+                return;
+            }
+
+            const usersWithoutJobs = parseInt(document.getElementById('totalUsers').textContent) -
+                document.querySelectorAll('#usersTable tr').length; // rough estimate
+
+            if (!confirm('Delete all users with no jobs and no email? This cannot be undone.')) {
+                return;
+            }
+
+            const statusEl = document.getElementById('cleanupStatus');
+            statusEl.textContent = 'Starting background cleanup...';
+
+            try {
+                const res = await fetch(`/api/admin/cleanup-users?token=${encodeURIComponent(token)}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+
+                if (res.status === 202 || data.success) {
+                    statusEl.textContent = data.message || 'Cleanup running in background';
+                    setTimeout(() => loadData(), 3000);
+                } else {
+                    statusEl.textContent = 'Error: ' + (data.error || 'Unknown');
+                }
+            } catch (e) {
+                statusEl.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        async function resetAnonymousCleanupCounter() {
+            const token = document.getElementById('adminToken').value;
+            if (!token) {
+                alert('Enter admin token first');
+                return;
+            }
+
+            if (!confirm('Reset the anonymous cleanup counter to zero? This does not restore deleted users.')) {
+                return;
+            }
+
+            const statusEl = document.getElementById('cleanupStatus');
+            statusEl.textContent = 'Resetting counter...';
+
+            try {
+                const res = await fetch(
+                    `/api/admin/anonymous-user-cleanup-stats/reset?token=${encodeURIComponent(token)}`,
+                    { method: 'POST' }
+                );
+                const data = await res.json();
+
+                if (data.success) {
+                    statusEl.textContent = 'Anonymous cleanup counter reset to 0';
+                    document.getElementById('anonymousCleanedTotal').textContent = '0';
+                } else {
+                    statusEl.textContent = 'Error: ' + (data.error || 'Unknown');
+                }
+            } catch (e) {
+                statusEl.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        async function resetStaleJobCleanupCounter() {
+            const token = document.getElementById('adminToken').value;
+            if (!token) {
+                alert('Enter admin token first');
+                return;
+            }
+
+            if (!confirm('Reset the startup abandoned-job cleanup counter to zero? This does not restore deleted jobs.')) {
+                return;
+            }
+
+            const statusEl = document.getElementById('cleanupStatus');
+            statusEl.textContent = 'Resetting startup cleanup counter...';
+
+            try {
+                const res = await fetch(
+                    `/api/admin/stale-job-cleanup-stats/reset?token=${encodeURIComponent(token)}`,
+                    { method: 'POST' }
+                );
+                const data = await res.json();
+
+                if (data.success) {
+                    statusEl.textContent = 'Startup cleanup counter reset to 0';
+                    document.getElementById('staleJobsCleanedTotal').textContent = '0';
+                } else {
+                    statusEl.textContent = 'Error: ' + (data.error || 'Unknown');
+                }
+            } catch (e) {
+                statusEl.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        const adminJobsById = {};
+
+        function formatJobOwner(job) {
+            if (!job) return '(unknown)';
+            if (job.user_email) return job.user_email;
+            if (job.username) return '@' + job.username;
+            if (job.user_id) return job.user_id.substring(0, 8) + '…';
+            return '(no owner)';
+        }
+
+        async function assignJobUserRequest(jobId, payload) {
+            const token = document.getElementById('adminToken').value;
+            const res = await fetch(
+                `/api/admin/jobs/${encodeURIComponent(jobId)}/assign-user?token=${encodeURIComponent(token)}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }
+            );
+            return { res, data: await res.json() };
+        }
+
+        async function assignJobUser(jobId) {
+            const token = document.getElementById('adminToken').value;
+            if (!token) {
+                alert('Enter admin token first');
+                return;
+            }
+
+            const job = adminJobsById[jobId];
+            const ownerLabel = formatJobOwner(job);
+            const query = prompt(
+                `Assign job ${jobId} to a different user.\nCurrent owner: ${ownerLabel}\n\nEnter email, username, or user ID:`
+            );
+            if (!query || !query.trim()) {
+                return;
+            }
+
+            try {
+                let { res, data } = await assignJobUserRequest(jobId, { query: query.trim() });
+
+                if (res.status === 409 && Array.isArray(data.users) && data.users.length) {
+                    const lines = data.users.map((u, i) => {
+                        const label = u.email || (u.username ? '@' + u.username : u.id.substring(0, 8) + '…');
+                        return `${i + 1}. ${label}`;
+                    }).join('\n');
+                    const pick = prompt(`Multiple users matched:\n${lines}\n\nEnter the number to assign to:`);
+                    const idx = parseInt(pick, 10) - 1;
+                    if (Number.isNaN(idx) || idx < 0 || idx >= data.users.length) {
+                        return;
+                    }
+                    ({ res, data } = await assignJobUserRequest(jobId, {
+                        user_id: data.users[idx].id,
+                    }));
+                }
+
+                if (data.success) {
+                    const newOwner = data.user_email || (data.username ? '@' + data.username : data.user_id);
+                    alert(`Job ${jobId} assigned to ${newOwner}`);
+                    loadData();
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function deleteJob(jobId) {
+            const token = document.getElementById('adminToken').value;
+            if (!token) {
+                alert('Enter admin token first');
+                return;
+            }
+
+            if (!confirm(`Delete job ${jobId}? This will also delete the video from storage. This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/admin/delete-job/${jobId}?token=${encodeURIComponent(token)}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    alert(`Job ${jobId} deleted successfully`);
+                    loadData(); // Refresh the tables
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        let currentUserDetailId = null;
+
+        function renderUserDetail(data) {
+            const panel = document.getElementById('userDetailPanel');
+            const u = data.user;
+            const c = data.counts || {};
+            currentUserDetailId = u.id;
+
+            const countCards = [
+                ['Jobs', c.jobs],
+                ['Comments', c.comments],
+                ['Tracked fencers', c.tracked_fencers],
+                ['Shares sent', c.touch_shares_sent],
+                ['Shares received', c.touch_shares_received],
+                ['Messages authored', c.touch_messages_authored],
+            ].map(([label, n]) => `
+                <div class="bg-gray-900/60 rounded-lg p-3 border border-gray-700">
+                    <p class="text-xs text-gray-400">${label}</p>
+                    <p class="text-xl font-bold text-sky-300">${n ?? 0}</p>
+                </div>
+            `).join('');
+
+            const jobsHtml = (data.jobs || []).map(j => `
+                <tr class="border-t border-gray-700">
+                    <td class="p-2 font-mono text-xs">${escapeHtml(j.job_id)}</td>
+                    <td class="p-2 text-sm">${escapeHtml(j.filename || '-')}</td>
+                    <td class="p-2">${getStatusBadge(j.status)}</td>
+                    <td class="p-2 text-xs text-gray-400">${formatDate(j.created_at)}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="4" class="p-2 text-gray-500 text-sm">None</td></tr>';
+
+            const commentsHtml = (data.comments || []).map(cm => `
+                <li class="text-sm border-b border-gray-700/60 py-2">
+                    <span class="text-gray-400">on "${escapeHtml(cm.post_title || 'post')}"</span>
+                    ${cm.approved ? '<span class="ml-2 text-xs text-green-400">approved</span>' : '<span class="ml-2 text-xs text-yellow-400">pending</span>'}
+                    <p class="text-gray-300 mt-1">${escapeHtml(cm.body)}</p>
+                </li>
+            `).join('') || '<li class="text-sm text-gray-500">None</li>';
+
+            const sentHtml = (data.touch_shares_sent || []).map(s => `
+                <li class="text-sm py-1">${escapeHtml(s.touch_ref || s.touch_id || s.id)} · job ${escapeHtml(s.job_id)} · ${s.recipient_count} recipient(s)</li>
+            `).join('') || '<li class="text-sm text-gray-500">None</li>';
+
+            const recvHtml = (data.touch_shares_received || []).map(s => `
+                <li class="text-sm py-1">${escapeHtml(s.touch_ref || s.share_id)} · job ${escapeHtml(s.job_id || '-')}</li>
+            `).join('') || '<li class="text-sm text-gray-500">None</li>';
+
+            const trackedHtml = (data.tracked_fencers || []).map(t => `
+                <li class="text-sm py-1">${escapeHtml(t.display_name)} (${escapeHtml(t.fencer_id)})</li>
+            `).join('') || '<li class="text-sm text-gray-500">None</li>';
+
+            panel.innerHTML = `
+                <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                    <div>
+                        <p class="font-mono text-xs text-gray-400">${escapeHtml(u.id)}</p>
+                        <p class="text-lg font-semibold">${escapeHtml(u.display_name || u.email || u.username || 'User')}</p>
+                        <p class="text-sm text-gray-400">
+                            ${u.email ? escapeHtml(u.email) : 'No email'}
+                            ${u.username ? ' · @' + escapeHtml(u.username) : ''}
+                            ${u.has_google ? ' · Google' : ''}
+                        </p>
+                        <p class="text-xs text-gray-500 mt-1">Created ${formatDate(u.created_at)} · Last seen ${formatDate(u.last_seen)}</p>
+                    </div>
+                    <button onclick="purgeUser('${u.id}')"
+                            class="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-sm font-medium">
+                        Delete user &amp; all data
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">${countCards}</div>
+                <div class="grid lg:grid-cols-2 gap-4">
+                    <div class="bg-gray-900/40 rounded-lg p-3 border border-gray-700">
+                        <h3 class="text-sm font-semibold text-gray-200 mb-2">Jobs${data.lists_truncated?.jobs ? ' (first 100)' : ''}</h3>
+                        <table class="w-full text-left"><tbody>${jobsHtml}</tbody></table>
+                    </div>
+                    <div class="bg-gray-900/40 rounded-lg p-3 border border-gray-700">
+                        <h3 class="text-sm font-semibold text-gray-200 mb-2">Blog comments</h3>
+                        <ul>${commentsHtml}</ul>
+                    </div>
+                    <div class="bg-gray-900/40 rounded-lg p-3 border border-gray-700">
+                        <h3 class="text-sm font-semibold text-gray-200 mb-2">Touch shares sent</h3>
+                        <ul>${sentHtml}</ul>
+                    </div>
+                    <div class="bg-gray-900/40 rounded-lg p-3 border border-gray-700">
+                        <h3 class="text-sm font-semibold text-gray-200 mb-2">Touch shares received</h3>
+                        <ul>${recvHtml}</ul>
+                    </div>
+                    <div class="bg-gray-900/40 rounded-lg p-3 border border-gray-700 lg:col-span-2">
+                        <h3 class="text-sm font-semibold text-gray-200 mb-2">Tracked opponents</h3>
+                        <ul>${trackedHtml}</ul>
+                    </div>
+                </div>
+            `;
+            panel.classList.remove('hidden');
+            document.getElementById('userLookupMatches').classList.add('hidden');
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        async function loadUserDetail(userId) {
+            const token = document.getElementById('adminToken').value;
+            if (!token) {
+                alert('Enter admin token first');
+                return;
+            }
+            showTab('users');
+            try {
+                const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/detail?token=${encodeURIComponent(token)}`);
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.error || 'Could not load user');
+                    return;
+                }
+                renderUserDetail(data);
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function lookupUser() {
+            const token = document.getElementById('adminToken').value;
+            const q = (document.getElementById('userLookupQuery').value || '').trim();
+            const matchesEl = document.getElementById('userLookupMatches');
+            const panel = document.getElementById('userDetailPanel');
+
+            if (!token) {
+                alert('Enter admin token first');
+                return;
+            }
+            if (!q) {
+                alert('Enter an email, username, or user ID');
+                return;
+            }
+
+            showTab('users');
+            matchesEl.classList.add('hidden');
+            panel.classList.add('hidden');
+
+            try {
+                const res = await fetch(`/api/admin/user-lookup?token=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`);
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.error || 'No matching users');
+                    return;
+                }
+                if (data.matches === 1 && data.user) {
+                    renderUserDetail(data);
+                    return;
+                }
+                const users = data.users || [];
+                matchesEl.innerHTML = `
+                    <p class="text-sm text-gray-400 mb-2">${users.length} matches — pick one:</p>
+                    <div class="flex flex-col gap-2">
+                        ${users.map(u => `
+                            <button type="button" onclick="loadUserDetail('${u.id}')"
+                                    class="text-left px-3 py-2 rounded-lg bg-gray-700/60 hover:bg-gray-700 border border-gray-600 text-sm">
+                                <span class="font-mono text-xs text-gray-400">${escapeHtml(u.id.substring(0, 8))}…</span>
+                                <span class="ml-2">${escapeHtml(u.email || u.username || u.display_name || 'User')}</span>
+                                ${u.username ? `<span class="text-sky-400 ml-1">@${escapeHtml(u.username)}</span>` : ''}
+                                <span class="text-gray-500 ml-2">(${u.counts?.jobs ?? 0} jobs)</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                `;
+                matchesEl.classList.remove('hidden');
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function purgeUser(userId) {
+            const token = document.getElementById('adminToken').value;
+            if (!token) {
+                alert('Enter admin token first');
+                return;
+            }
+            const typed = prompt(
+                'This permanently deletes the user, all jobs, videos, results, touch shares, comments, and tracked opponents.\n\nType DELETE to confirm:'
+            );
+            if (typed !== 'DELETE') {
+                return;
+            }
+
+            const statusEl = document.getElementById('cleanupStatus');
+            statusEl.textContent = 'Deleting user...';
+
+            try {
+                const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}?token=${encodeURIComponent(token)}`, {
+                    method: 'DELETE',
+                });
+                const data = await res.json();
+                if (data.success) {
+                    statusEl.textContent = data.message || 'User deleted.';
+                    document.getElementById('userDetailPanel').classList.add('hidden');
+                    document.getElementById('userLookupMatches').classList.add('hidden');
+                    currentUserDetailId = null;
+                    await loadData();
+                    showTab('users');
+                } else {
+                    statusEl.textContent = 'Error: ' + (data.error || 'Unknown');
+                    alert(data.error || 'Purge failed');
+                }
+            } catch (e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                alert('Error: ' + e.message);
+            }
+        }
+    </script>
+</body>
+</html>

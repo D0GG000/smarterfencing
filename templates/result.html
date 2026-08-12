@@ -1,0 +1,2817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    {% set seo_title = "Fencing Analysis Results – SmarterFencing" %}
+    {% set seo_robots = "noindex,nofollow" %}
+    {% include 'seo.html' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Set true when the loaded job is a Clipper job (highlight reel, no 3D/body-target analysis).
+        window.CLIPPER_MODE = false;
+        window._highlightReelUrl = null;
+    </script>
+    <style>
+        .results-page.clipper-mode #anchorAnalysis,
+        .results-page.clipper-mode #touchLocationSummary,
+        .results-page.clipper-mode #attackTypeSummary,
+        .results-page.clipper-mode #touchDetail,
+        .results-page.clipper-mode #mobileSwipeCarousel,
+        .results-page.clipper-mode #forwardBackToggleWrap,
+        .results-page.clipper-mode #forwardBackCanvas {
+            display: none !important;
+        }
+        body.results-page { overflow-x: clip; }
+        .results-page .mobile-swipe-tabs button.active { background: #0f766e; }
+        .results-page .mobile-swipe-tabs button:not(.active) { background: #1a222d; }
+        .results-page .mobile-swipe-dot { width: 7px; height: 7px; border-radius: 999px; background: #374151; transition: background 0.2s; }
+        .results-page .mobile-swipe-dot.active { background: #2dd4bf; }
+        .results-video-wrap { position: relative; display: block; width: 100%; }
+        .results-video-wrap video { display: block; width: 100%; border-radius: 0.5rem; }
+        .results-video-wrap #forwardBackCanvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 5; display: none;
+        }
+        .results-page .h-scroll {
+            display: flex; gap: 0.5rem; overflow-x: auto; overflow-y: hidden;
+            overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+        }
+        @media (max-width: 1023px) {
+            .results-page #skeleton3d { height: 240px !important; }
+            .results-page #hostTouchListMobile .touch-btn { min-height: 44px; }
+        }
+        .results-page #touchLocationSummary details > summary,
+        .results-page #attackTypeSummary details > summary,
+        .results-page #anglesGuide > summary {
+            list-style: none;
+            cursor: pointer;
+            user-select: none;
+        }
+        .results-page #touchLocationSummary details > summary::-webkit-details-marker,
+        .results-page #attackTypeSummary details > summary::-webkit-details-marker,
+        .results-page #anglesGuide > summary::-webkit-details-marker { display: none; }
+        .results-page #touchLocationSummary .summary-chevron,
+        .results-page #attackTypeSummary .summary-chevron,
+        .results-page #anglesGuide .summary-chevron {
+            transition: transform 0.2s ease;
+        }
+        .results-page #touchLocationSummary details[open] .summary-chevron,
+        .results-page #attackTypeSummary details[open] .summary-chevron,
+        .results-page #anglesGuide[open] .summary-chevron {
+            transform: rotate(180deg);
+        }
+        .touch-focus-mode #touchLocationSummary,
+        .touch-focus-mode #attackTypeSummary,
+        .touch-focus-mode #hostTouchListDesktop,
+        .touch-focus-mode #hostTouchListMobile,
+        .touch-focus-mode #anchorAnalysis,
+        .touch-focus-mode .analyze-another-link,
+        .touch-focus-mode #archetypeReveal,
+        .touch-focus-mode #llmCoachingPanel,
+        .touch-focus-mode #boutMacroEditor,
+        .touch-focus-mode #backToStylesBtn {
+            display: none !important;
+        }
+        .results-page.clipper-mode #archetypeReveal,
+        .results-page.clipper-mode #llmCoachingPanel,
+        .results-page.clipper-mode #boutMacroEditor,
+        .results-page.clipper-mode #backToStylesBtn {
+            display: none !important;
+        }
+        body.archetype-reveal-active .analyze-another-link {
+            display: none !important;
+        }
+    </style>
+</head>
+<body class="results-page demo-page min-h-screen text-white" data-archetypes-url="{{ url_for('demo.archetypes_page') }}">
+    {% include 'header.html' %}
+
+    <div class="max-w-5xl mx-auto p-4 pt-4 lg:p-6 lg:pt-6">
+        <header class="mb-4 lg:mb-8 pt-1 lg:pt-6 text-left lg:text-center">
+            <h1 class="text-xl lg:text-3xl font-bold mb-0 lg:mb-2">Fencing Analysis Results</h1>
+            <p class="text-gray-400 text-sm hidden lg:block">View your saved fencing touch analysis</p>
+            <p id="guestViewBanner" class="hidden mt-2 lg:mt-3 text-sm text-amber-400/90 lg:max-w-xl lg:mx-auto">
+                Shared link (view only). Corrections and notes are disabled for guests.
+            </p>
+            <p id="touchFocusBanner" class="hidden mt-2 lg:mt-3 text-sm text-sky-400/90 lg:max-w-xl lg:mx-auto"></p>
+        </header>
+
+        <!-- Load JSON Section -->
+        <div id="load-section" class="bg-gray-800 rounded-2xl p-4 lg:p-8 border border-gray-700 mb-6">
+            <div class="text-center">
+                <svg class="w-14 h-14 mx-auto text-blue-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <h2 class="text-xl font-semibold mb-2">Load Your Results</h2>
+                <p class="text-gray-400 mb-4">Drop your results JSON file or click to select</p>
+
+                <div id="dropzone" class="border-2 border-dashed border-gray-600 rounded-xl p-4 sm:p-8 hover:border-blue-500 transition cursor-pointer mb-4 touch-target">
+                    <input type="file" id="jsonInput" accept=".json,application/json" class="hidden">
+                    <p class="text-gray-400">Drop JSON file here or click to browse</p>
+                </div>
+
+                <p id="loadStatus" class="text-sm text-gray-500 hidden"></p>
+            </div>
+        </div>
+
+        <!-- Results Section (hidden until JSON loaded) -->
+        <div id="results-section" class="hidden">
+            <!-- Highlight reel (clipper jobs only) -->
+            <div id="highlightReelCard" class="hidden bg-gray-800 rounded-2xl p-3 lg:p-6 border border-blue-700/40 mb-3 lg:mb-4">
+                <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+                    <h2 class="text-base lg:text-xl font-semibold flex items-center gap-2">
+                        <svg class="w-5 h-5 lg:w-6 lg:h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                        Highlight Reel
+                    </h2>
+                    <a id="highlightReelDownload" href="#" download class="hidden px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium">Download reel</a>
+                </div>
+                <video id="highlightReelVideo" class="w-full rounded-lg bg-black" controls preload="metadata" playsinline></video>
+                <p id="highlightReelStatus" class="text-xs text-gray-400 mt-2"></p>
+            </div>
+
+            <div id="archetypeReveal" class="archetype-reveal hidden mb-3 lg:mb-4"></div>
+
+            <div id="llmCoachingPanel" class="llm-coach-shell hidden rounded-2xl p-4 lg:p-6 mb-3 lg:mb-4">
+                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                    <div>
+                        <h2 class="llm-coach-heading text-xl lg:text-2xl text-emerald-200">Your coaching analysis</h2>
+                        <p id="llmCoachingSubtitle" class="text-xs text-gray-400 mt-1.5"></p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span id="llmStaleBadge" class="hidden text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Data changed — rerun</span>
+                        <button type="button" id="rerunLlmBtn" onclick="rerunLlmAnalysis()"
+                            class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold disabled:opacity-50">Rerun analysis</button>
+                        <a id="llmArchetypesLink" href="/archetypes" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs font-medium">Archetypes</a>
+                    </div>
+                </div>
+                <p id="llmCoachingStatus" class="text-xs text-gray-500 mb-2"></p>
+                <div id="llmCoachingBody" class="space-y-3"></div>
+            </div>
+
+            <div id="resultsDetail">
+            <div class="bg-gray-800 rounded-2xl p-3 lg:p-6 border border-gray-700 mb-3 lg:mb-4">
+                <!-- Video Name and Score Header -->
+                <div id="resultsHeader" class="mb-3 lg:mb-4">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                        <div>
+                            <h2 class="text-base lg:text-xl font-semibold flex items-center gap-2">
+                                <svg class="w-5 h-5 lg:w-6 lg:h-6 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                Touch Analysis Results
+                            </h2>
+                            <p id="videoNameDisplay" class="text-gray-400 text-xs lg:text-sm mt-0.5 lg:mt-1 break-all"></p>
+                            <button type="button" id="backToStylesBtn" class="hidden mt-2 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg border border-emerald-500/40 text-emerald-300/90 hover:bg-emerald-500/10 transition"
+                                onclick="window.FencerArchetype && FencerArchetype.showArchetypeReveal()">← Back to styles</button>
+                        </div>
+                        <div class="flex items-center gap-3 lg:gap-4">
+                            <button type="button" id="shareAnalysisUserBtn" onclick="openShareAnalysisWithUser()"
+                                class="hidden px-3 py-1.5 bg-violet-600 hover:bg-violet-500 rounded-lg text-xs lg:text-sm font-semibold transition flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                </svg>
+                                Share with user
+                            </button>
+                            <button type="button" id="postAnalysisCommunityBtn" onclick="postAnalysisToCommunity()"
+                                class="hidden px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs lg:text-sm font-semibold transition flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4z"/>
+                                </svg>
+                                <span id="postAnalysisCommunityLabel">Post to Community</span>
+                            </button>
+                            <div class="flex items-center gap-3 bg-gray-700/50 rounded-lg px-3 py-1.5 lg:px-4 lg:py-2">
+                                <div class="text-center">
+                                    <p class="text-[10px] lg:text-xs text-blue-400 font-medium">Fencer 1</p>
+                                    <p id="fencer1Score" class="text-xl lg:text-2xl font-bold text-blue-400 leading-none">0</p>
+                                </div>
+                                <div class="text-gray-500 text-lg lg:text-xl font-light">-</div>
+                                <div class="text-center">
+                                    <p class="text-[10px] lg:text-xs text-red-400 font-medium">Fencer 2</p>
+                                    <p id="fencer2Score" class="text-xl lg:text-2xl font-bold text-red-400 leading-none">0</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 bg-gray-700/40 rounded-lg px-2.5 py-1.5 border border-gray-600/50">
+                                <div class="text-center">
+                                    <p class="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Attempts</p>
+                                </div>
+                                <p id="fencer1Attempts" class="text-lg font-bold text-blue-300 leading-none">0</p>
+                                <span class="text-gray-600">/</span>
+                                <p id="fencer2Attempts" class="text-lg font-bold text-red-300 leading-none">0</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Video + desktop touch sidebar -->
+                <div id="anchorVideo" class="lg:grid lg:grid-cols-3 lg:gap-4">
+                    <div class="lg:col-span-2">
+                        <div id="resultsVideoHost" class="results-video-wrap">
+                        <video id="resultsVideo" class="w-full rounded-lg bg-black" controls preload="auto" playsinline></video>
+                        <canvas id="forwardBackCanvas"></canvas>
+                        </div>
+                        <div id="forwardBackToggleWrap" class="hidden mt-2">
+                            <label class="inline-flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
+                                <input type="checkbox" id="showForwardBack" class="rounded border-gray-500 bg-gray-700 text-blue-500 focus:ring-blue-500" />
+                                Forward / back overlay
+                            </label>
+                            <span class="text-[11px] text-gray-500 ml-2">white = facing · colored = motion</span>
+                        </div>
+                        <div id="touchClipControls" class="hidden flex flex-wrap items-center gap-2 mt-2">
+                            <button type="button" id="playTouchClipBtn" onclick="playSelectedTouchClip()"
+                                class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium">
+                                Play touch
+                            </button>
+                            <button type="button" id="shareTouchUserBtn" onclick="openShareTouchWithUser()"
+                                class="hidden px-3 py-1.5 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium">
+                                Share with user
+                            </button>
+                            <button type="button" id="copyTouchLinkBtn" onclick="copyTouchShareLink()"
+                                class="hidden px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium">
+                                Copy touch link
+                            </button>
+                            <button type="button" id="postTouchCommunityBtn" onclick="postTouchToCommunity()"
+                                class="hidden px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium">
+                                Post to Community
+                            </button>
+                            <span id="touchClipPhase" class="text-xs text-gray-400"></span>
+                            <span id="touchShareStatus" class="text-xs text-gray-500"></span>
+                        </div>
+                        <div id="touchShareFallbackHost" class="hidden mt-1 w-full"></div>
+                        <p id="videoStatus" class="text-xs text-gray-500 mt-1 lg:mt-2"></p>
+                    </div>
+                    <div id="hostTouchListDesktop" class="hidden lg:block bg-gray-700/50 rounded-lg p-3 space-y-4">
+                        <div id="hostTimestampsList">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-3">Detected Touches</h3>
+                            <div id="timestampsList" class="space-y-2 max-h-64 overflow-y-auto"></div>
+                        </div>
+                        <div id="armAttemptsPanel" class="border-t border-gray-600/60 pt-3">
+                            <button type="button" id="armAttemptsToggle"
+                                class="w-full flex items-center justify-between text-left mb-2 group"
+                                onclick="toggleArmAttemptsList()">
+                                <h3 class="text-sm font-semibold text-gray-300 group-hover:text-white">
+                                    Arm Attempts
+                                    <span id="armAttemptsCountLabel" class="text-xs font-normal text-gray-500 ml-1"></span>
+                                </h3>
+                                <span id="armAttemptsChevron" class="text-gray-500 text-xs">▼</span>
+                            </button>
+                            <div id="attemptsList" class="space-y-1 max-h-48 overflow-y-auto hidden"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Touch location summary (reparented on mobile vs desktop) -->
+                <div id="hostSummaryMobile" class="lg:hidden"></div>
+                <div id="hostSummaryDesktop" class="hidden lg:block"></div>
+                <div id="touchLocationSummary" class="mt-4 bg-gray-700/50 rounded-lg hidden overflow-hidden">
+                    <details id="touchLocationSummaryDetails" open>
+                        <summary class="p-4 flex items-center justify-between gap-2">
+                            <h3 class="text-sm font-semibold text-gray-300">Touch Location Summary</h3>
+                            <span class="summary-chevron text-xs text-gray-500" aria-hidden="true">▼</span>
+                        </summary>
+                        <div class="px-4 pb-4 border-t border-gray-600/40">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                                <div class="bg-gray-800 rounded-lg p-4">
+                                    <h4 class="text-sm font-medium text-blue-400 mb-3 flex items-center gap-2">
+                                        <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                                        Fencer 1 - Touches Landed
+                                    </h4>
+                                    <div id="fencer1TouchChart" class="space-y-2"></div>
+                                </div>
+                                <div class="bg-gray-800 rounded-lg p-4">
+                                    <h4 class="text-sm font-medium text-red-400 mb-3 flex items-center gap-2">
+                                        <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                                        Fencer 2 - Touches Landed
+                                    </h4>
+                                    <div id="fencer2TouchChart" class="space-y-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div id="attackTypeSummary" class="mt-4 bg-gray-700/50 rounded-lg hidden overflow-hidden">
+                    <details id="attackTypeSummaryDetails" open>
+                        <summary class="p-4 flex items-center justify-between gap-2">
+                            <h3 class="text-sm font-semibold text-gray-300">Attack Type Summary</h3>
+                            <span class="summary-chevron text-xs text-gray-500" aria-hidden="true">▼</span>
+                        </summary>
+                        <div class="px-4 pb-4 border-t border-gray-600/40">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                                <div class="bg-gray-800 rounded-lg p-4">
+                                    <h4 class="text-sm font-medium text-blue-400 mb-3 flex items-center gap-2">
+                                        <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                                        Fencer 1 - Attacks
+                                    </h4>
+                                    <div id="fencer1AttackChart" class="space-y-2"></div>
+                                </div>
+                                <div class="bg-gray-800 rounded-lg p-4">
+                                    <h4 class="text-sm font-medium text-red-400 mb-3 flex items-center gap-2">
+                                        <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                                        Fencer 2 - Attacks
+                                    </h4>
+                                    <div id="fencer2AttackChart" class="space-y-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div id="boutMacroEditor" class="mt-4 bg-gray-700/50 rounded-lg hidden overflow-hidden">
+                    <details id="boutMacroEditorDetails">
+                        <summary class="p-4 flex items-center justify-between gap-2 cursor-pointer">
+                            <h3 class="text-sm font-semibold text-gray-300">Edit bout macros</h3>
+                            <span class="summary-chevron text-xs text-gray-500" aria-hidden="true">▼</span>
+                        </summary>
+                        <div class="px-4 pb-4 border-t border-gray-600/40 space-y-4 pt-4">
+                            <p class="text-xs text-gray-400">Correct bout-level stats that feed coaching (arm attempts + who advanced more). Save, then rerun LLM analysis.</p>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <label class="text-xs text-gray-400">F1 arm attempts
+                                    <input id="macroF1Arm" type="number" min="0" class="mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-sm" />
+                                </label>
+                                <label class="text-xs text-gray-400">F2 arm attempts
+                                    <input id="macroF2Arm" type="number" min="0" class="mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-sm" />
+                                </label>
+                                <label class="text-xs text-gray-400">Advanced more often
+                                    <select id="macroFootAggressor" class="mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-sm">
+                                        <option value="fencer1">Fencer 1</option>
+                                        <option value="fencer2">Fencer 2</option>
+                                        <option value="even">Even</option>
+                                    </select>
+                                </label>
+                                <label class="text-xs text-gray-400">F1 pre-touch advances
+                                    <input id="macroF1Pre" type="number" min="0" class="mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-sm" />
+                                </label>
+                                <label class="text-xs text-gray-400">F2 pre-touch advances
+                                    <input id="macroF2Pre" type="number" min="0" class="mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-sm" />
+                                </label>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button type="button" onclick="saveBoutMacroCorrections()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium">Save bout macros</button>
+                                <span id="macroSaveStatus" class="text-xs text-gray-500"></span>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <!-- Mobile touch picker (third on mobile) -->
+                <div id="hostTouchListMobile" class="lg:hidden mt-3 hidden">
+                    <h3 class="text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Select a touch</h3>
+                    <div id="hostTouchListMobileInner" class="h-scroll pb-1"></div>
+                </div>
+
+                <!-- Mobile swipe: per-frame analysis ↔ 3D pose -->
+                <div id="mobileSwipeCarousel" class="lg:hidden mt-3 hidden">
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <div class="mobile-swipe-tabs flex gap-1 flex-1">
+                            <button type="button" id="swipeTabAnalysis" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg text-white active">Per-Frame Analysis</button>
+                            <button type="button" id="swipeTab3d" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg text-white">3D Pose</button>
+                        </div>
+                        <div class="flex gap-1.5 shrink-0" aria-hidden="true">
+                            <span id="swipeDot0" class="mobile-swipe-dot active"></span>
+                            <span id="swipeDot1" class="mobile-swipe-dot"></span>
+                        </div>
+                    </div>
+                    <div id="mobileSwipeViewport" class="overflow-hidden rounded-xl">
+                        <div id="mobileSwipeTrack" class="flex transition-transform duration-300 ease-out will-change-transform">
+                            <div id="mobileSlideAnalysis" class="w-full shrink-0 min-w-full"></div>
+                            <div id="mobileSlide3d" class="w-full shrink-0 min-w-full"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="anchorTouchDetail">
+                <!-- Selected Touch Detail -->
+                <div id="touchDetail" class="mt-4 hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                        <!-- 3D Skeleton Viewer -->
+                        <div class="bg-gray-900 rounded-xl overflow-hidden">
+                            <div class="p-3 border-b border-gray-700 flex justify-between items-center">
+                                <span class="text-sm font-medium text-gray-300">3D Pose Animation</span>
+                                <div class="flex items-center gap-2">
+                                    <span id="detectedHandedness" class="text-xs text-gray-500 px-2 py-0.5 bg-gray-700 rounded">Detecting...</span>
+                                    <button id="playPauseBtn" onclick="toggleAnimation()" class="px-2 py-1 bg-blue-600 rounded text-sm hover:bg-blue-500">
+                                        Pause
+                                    </button>
+                                </div>
+                                <span id="frameCounter" class="text-xs text-gray-500">Frame 1/30</span>
+                            </div>
+                            <div id="skeleton3d" class="w-full" style="height: 300px;"></div>
+                            <!-- 3D Viewer Controls -->
+                            <div class="p-3 border-t border-gray-700 bg-gray-800/50">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <span class="text-xs text-gray-400 w-12">Frame:</span>
+                                    <input type="range" id="skeletonFrameSlider" min="1" max="30" value="1" class="flex-1" oninput="onSkeletonFrameSliderChange(this.value)">
+                                    <span id="skeletonFrameLabel" class="text-xs text-gray-400 w-16 text-right">1 / 30</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-xs text-gray-400 w-12">Speed:</span>
+                                    <input type="range" id="animationSpeedSlider" min="1" max="10" value="1" class="flex-1" oninput="onSpeedSliderChange(this.value)">
+                                    <span id="speedLabel" class="text-xs text-gray-400 w-16 text-right">0.25x</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Prediction Info -->
+                        <div class="bg-gray-700 rounded-xl p-5 flex flex-col justify-center">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p id="detailTitle" class="text-lg font-semibold"></p>
+                                    <p id="detailTouchRef" class="text-xs font-mono text-sky-400/90 mt-1 hidden"></p>
+                                    <p id="detailTime" class="text-gray-400 text-sm"></p>
+                                    <div id="detailConfidence" class="flex flex-wrap gap-2 mt-3"></div>
+                                </div>
+                                <div id="detailPrediction" class="px-6 py-3 rounded-xl">
+                                    <span class="text-xl font-bold"></span>
+                                </div>
+                            </div>
+                            <div class="mt-4 pt-4 border-t border-gray-600">
+                                <p class="text-sm text-gray-400">Touch location predicted based on 3D pose analysis of the scoring fencer's movement in the 30 frames leading up to the touch.</p>
+                                <p id="modelPredictionNote" class="text-xs text-amber-400/90 mt-2 hidden"></p>
+                                <div id="attackTypePanel" class="mt-4 pt-4 border-t border-gray-600 hidden">
+                                    <p class="text-sm text-gray-400 mb-3">Attack type of the scoring fencer (lunge, fleche, or counter / unconventional strike) from 3D movement geometry.</p>
+                                    <div class="flex items-center justify-between gap-4 flex-wrap">
+                                        <div id="detailAttackConfidence" class="flex flex-wrap gap-2"></div>
+                                        <div id="detailAttackPrediction" class="px-5 py-2 rounded-xl">
+                                            <span class="text-lg font-bold"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="correctionEditor" class="mt-4 flex flex-wrap items-center gap-2 hidden">
+                                    <label class="text-xs text-gray-400">Correct touch location</label>
+                                    <select id="correctionSelect" class="bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-sm capitalize">
+                                        <option value="chest">chest</option>
+                                        <option value="abdomen">abdomen</option>
+                                        <option value="arm">arm</option>
+                                        <option value="leg">leg</option>
+                                    </select>
+                                    <label class="text-xs text-gray-400 ml-1">Attack type</label>
+                                    <select id="attackCorrectionSelect" class="bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-sm">
+                                        <option value="lunge">lunge</option>
+                                        <option value="fleche">fleche</option>
+                                        <option value="other">counter / unconventional</option>
+                                    </select>
+                                    <button type="button" onclick="saveTouchCorrection()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium">Save correction</button>
+                                    <span id="correctionStatus" class="text-xs text-gray-500"></span>
+                                </div>
+                                <div id="touchNoteEditor" class="mt-4 pt-4 border-t border-gray-600 hidden">
+                                    <label for="touchNoteInput" class="text-xs text-gray-400 block mb-2">Your notes (this touch)</label>
+                                    <textarea id="touchNoteInput" rows="3" maxlength="4000" class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 resize-y min-h-[4.5rem]" placeholder="Coaching notes, what happened on strip, etc."></textarea>
+                                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                                        <button type="button" onclick="saveTouchNote()" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 rounded-lg text-sm font-medium">Save note</button>
+                                        <span id="touchNoteStatus" class="text-xs text-gray-500"></span>
+                                    </div>
+                                </div>
+                                <div id="touchDeleteEditor" class="mt-4 pt-4 border-t border-gray-600 hidden">
+                                    <p class="text-xs text-gray-400 mb-2">Remove false touches (e.g. floor hits) from the list and score totals.</p>
+                                    <button type="button" onclick="deleteSelectedTouch()" class="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 rounded-lg text-sm font-medium">Remove this touch</button>
+                                    <span id="touchDeleteStatus" class="text-xs text-gray-500 ml-2"></span>
+                                </div>
+                                <div id="deletedTouchesPanel" class="mt-4 pt-4 border-t border-gray-600 hidden">
+                                    <p id="deletedTouchesHeading" class="text-xs text-amber-400/90 mb-2">Removed touches (restore if needed)</p>
+                                    <ul id="deletedTouchesList" class="space-y-2 text-sm max-h-40 overflow-y-auto overscroll-contain pr-1"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+
+                <div id="anchorAnalysis">
+                <!-- Per-Frame Analysis Panel -->
+                <div id="analysisPanel" class="bg-gray-800 rounded-xl overflow-hidden border border-gray-700">
+                    <div class="p-4 border-b border-gray-700 flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-200">Per-Frame Pose Analysis</h3>
+                            <p class="text-sm text-gray-400">Extension angles and joint angles for each of the 30 frames</p>
+                        </div>
+                        <div class="flex gap-2 items-center flex-wrap justify-end">
+                            <div class="flex items-center gap-1 bg-gray-700 rounded-lg p-1" title="Swap the metric strip below">
+                                <button type="button" id="analysisViewAngles" onclick="setAnalysisMetricsView('angles')" class="px-2 py-1 text-xs rounded hover:bg-gray-600 bg-blue-600">Angles</button>
+                                <button type="button" id="analysisViewSpatial" onclick="setAnalysisMetricsView('spatial')" class="px-2 py-1 text-xs rounded hover:bg-gray-600">Advance</button>
+                            </div>
+                            <div class="flex flex-col items-end gap-0.5 shrink-0">
+                                <span class="text-[10px] uppercase tracking-wide text-gray-500 leading-none">Handedness</span>
+                                <div class="flex items-center gap-1 bg-gray-700 rounded-lg p-1">
+                                    <button id="handednessAuto" onclick="setHandedness('auto')" class="px-2 py-1 text-xs rounded hover:bg-gray-600 bg-blue-600">Auto</button>
+                                    <button id="handednessLeft" onclick="setHandedness('left')" class="px-2 py-1 text-xs rounded hover:bg-gray-600">Left</button>
+                                    <button id="handednessRight" onclick="setHandedness('right')" class="px-2 py-1 text-xs rounded hover:bg-gray-600">Right</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Current Frame Analysis -->
+                    <div class="p-4 bg-gray-900/50">
+                        <div id="analysisFrameNavRow" class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                            <span id="currentFrameLabel" class="text-sm font-medium text-blue-400">Frame 1 Analysis</span>
+                            <div class="flex gap-2">
+                                <button onclick="prevAnalysisFrame()" class="px-2 py-1 bg-gray-700 rounded text-sm hover:bg-gray-600">Previous</button>
+                                <input type="range" id="frameSlider" min="1" max="30" value="1" class="w-48" oninput="onFrameSliderChange(this.value)">
+                                <button onclick="nextAnalysisFrame()" class="px-2 py-1 bg-gray-700 rounded text-sm hover:bg-gray-600">Next</button>
+                            </div>
+                        </div>
+
+                        <div id="angleMetricsPanel" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div class="bg-gray-800 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 mb-1">Arm Extension (% of 180)</p>
+                                <p id="armExtension" class="text-xl font-bold text-blue-400">--</p>
+                            </div>
+                            <div class="bg-gray-800 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 mb-1">Right Knee</p>
+                                <p id="rightKneeAngle" class="text-lg font-semibold text-blue-400">--</p>
+                            </div>
+                            <div class="bg-gray-800 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 mb-1">Left Knee</p>
+                                <p id="leftKneeAngle" class="text-lg font-semibold text-green-400">--</p>
+                            </div>
+                            <div class="bg-gray-800 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 mb-1">Dom. Shoulder</p>
+                                <p id="domShoulderAngle" class="text-lg font-semibold text-orange-400">--</p>
+                            </div>
+                        </div>
+                        <details id="anglesGuide" class="mt-3 bg-gray-800/60 rounded-lg overflow-hidden border border-gray-700/50">
+                            <summary class="px-3 py-2 flex items-center justify-between gap-2 text-xs text-gray-400 hover:text-gray-300">
+                                <span>What do these angles mean?</span>
+                                <span class="summary-chevron text-xs text-gray-500" aria-hidden="true">▼</span>
+                            </summary>
+                            <div class="px-3 pb-3 pt-2 text-xs text-gray-400 space-y-2.5 border-t border-gray-700/50">
+                                <p class="text-gray-500">All angles are measured in 3D from the pose skeleton. Handedness (Auto / Left / Right) picks which arm is treated as the weapon arm.</p>
+                                <dl class="space-y-2">
+                                    <div>
+                                        <dt class="font-medium text-blue-400">Arm Extension (% of 180)</dt>
+                                        <dd class="mt-0.5 text-gray-500">Elbow angle on the weapon arm (shoulder → elbow → wrist), shown as a percentage of a fully straight arm. 100% ≈ fully extended; lower values mean a more bent arm at the touch.</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-medium text-blue-400">Right Knee / Left Knee</dt>
+                                        <dd class="mt-0.5 text-gray-500">Knee angle (hip → knee → ankle). ~180° is straight; lower values mean a bent knee, as in a lunge.</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-medium text-orange-400">Dom. Shoulder</dt>
+                                        <dd class="mt-0.5 text-gray-500">Shoulder angle on the weapon side (torso → shoulder → elbow). Shows how far the weapon arm is raised or extended away from the body.</dd>
+                                    </div>
+                                </dl>
+                            </div>
+                        </details>
+                        <div id="spatialTouchPanel" class="hidden space-y-4">
+                            <div>
+                                <p class="text-[11px] uppercase tracking-wide text-gray-500 mb-2">This touch</p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div class="bg-gray-800 rounded-lg p-3">
+                                        <p class="text-xs text-gray-400 mb-1">Who advanced more</p>
+                                        <p id="spatialPreTouchAggressor" class="text-lg font-semibold text-emerald-400">--</p>
+                                        <p class="text-xs text-gray-500 mt-1">More time labeled forward ~5s to 0.5s before light</p>
+                                    </div>
+                                    <div class="bg-gray-800 rounded-lg p-3">
+                                        <p class="text-xs text-gray-400 mb-1">Time advancing</p>
+                                        <p id="spatialAdvanceScores" class="text-lg font-semibold text-gray-200 tabular-nums">--</p>
+                                        <p class="text-xs text-gray-500 mt-1">% of window labeled forward (F1 / F2)</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Bout</p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div class="bg-gray-800 rounded-lg p-3">
+                                        <p class="text-xs text-gray-400 mb-1">Advanced more often</p>
+                                        <p id="spatialFootworkAggressor" class="text-lg font-semibold text-lime-400">--</p>
+                                        <p class="text-xs text-gray-500 mt-1">Most sole wins on pre-touch advance</p>
+                                    </div>
+                                    <div class="bg-gray-800 rounded-lg p-3">
+                                        <p class="text-xs text-gray-400 mb-1">Wins by fencer</p>
+                                        <p id="spatialFootworkSplit" class="text-lg font-semibold text-gray-200 tabular-nums">--</p>
+                                        <p class="text-xs text-gray-500 mt-1">F1 / F2 (even exchanges)</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Summary Statistics -->
+                    <div class="p-4 border-t border-gray-700">
+                        <h4 class="text-sm font-medium text-gray-300 mb-3">Sequence Statistics</h4>
+                        <div id="sequenceStats" class="grid grid-cols-2 md:grid-cols-6 gap-3"></div>
+                    </div>
+
+                    <!-- Frame-by-Frame Chart -->
+                    <div class="p-4 border-t border-gray-700">
+                        <h4 class="text-sm font-medium text-gray-300 mb-3">Arm Extension Over Time (% of 180)</h4>
+                        <canvas id="analysisChart" class="w-full" style="height: 120px;"></canvas>
+                    </div>
+                </div>
+                </div>
+            </div>
+            </div><!-- /#resultsDetail -->
+
+            <a href="{{ url_for('demo.demo') }}" class="analyze-another-link block w-full py-3 bg-gray-700 rounded-xl font-semibold hover:bg-gray-600 transition text-center">
+                Analyze Another Video
+            </a>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='header.js') }}"></script>
+    <script src="{{ url_for('static', filename='touch-player.js') }}"></script>
+    <script src="{{ url_for('static', filename='forward_back_overlay.js') }}"></script>
+    <script src="{{ url_for('static', filename='fencer-archetype.js') }}"></script>
+    <script src="{{ url_for('static', filename='touch-share-ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='community-ui.js') }}"></script>
+    <script>
+        // ============================================================
+        // Global State
+        // ============================================================
+        let loadedResults = null;
+        let THREE_D_CACHE = {};
+        let ARM_ATTEMPTS_CACHE = null;
+        let VIDEO_FPS = 30;
+        let allResults = [];
+        let resultsJobId = null;
+        let deletedTouchIds = [];
+        let _armAttemptsExpanded = false;
+        window.resultsReadOnly = false;
+
+        window._analysisMetricsView = window._analysisMetricsView || 'angles';
+        window._spatialTouchSummaryFromServer = null;
+
+        function setArmAttemptsCache(payload) {
+            if (payload && typeof payload === 'object' && Array.isArray(payload.items)) {
+                ARM_ATTEMPTS_CACHE = payload;
+            } else if (payload == null) {
+                ARM_ATTEMPTS_CACHE = null;
+            }
+            window.ARM_ATTEMPTS_CACHE = ARM_ATTEMPTS_CACHE;
+            if (typeof refreshForwardBackOverlay === 'function') {
+                refreshForwardBackOverlay();
+            }
+        }
+
+        function toggleArmAttemptsList() {
+            _armAttemptsExpanded = !_armAttemptsExpanded;
+            const list = document.getElementById('attemptsList');
+            const chev = document.getElementById('armAttemptsChevron');
+            if (!list) return;
+            list.classList.toggle('hidden', !_armAttemptsExpanded);
+            if (chev) chev.textContent = _armAttemptsExpanded ? '▲' : '▼';
+        }
+
+        function seekToArmAttempt(sec) {
+            const video = document.getElementById('resultsVideo');
+            if (!video) return;
+            const t = Math.max(0, Number(sec) || 0);
+            video.currentTime = Math.max(0, t - 0.05);
+            video.play().catch(() => {});
+        }
+
+        function renderArmAttempts() {
+            const f1El = document.getElementById('fencer1Attempts');
+            const f2El = document.getElementById('fencer2Attempts');
+            const list = document.getElementById('attemptsList');
+            const countLabel = document.getElementById('armAttemptsCountLabel');
+            const panel = document.getElementById('armAttemptsPanel');
+            if (window.CLIPPER_MODE) {
+                if (panel) panel.classList.add('hidden');
+                if (f1El) f1El.textContent = '—';
+                if (f2El) f2El.textContent = '—';
+                return;
+            }
+            if (panel) panel.classList.remove('hidden');
+            const data = ARM_ATTEMPTS_CACHE;
+            const items = (data && Array.isArray(data.items)) ? data.items.slice() : [];
+            const c1 = data ? (data.fencer1_total || 0) : 0;
+            const c2 = data ? (data.fencer2_total || 0) : 0;
+            if (f1El) f1El.textContent = String(c1);
+            if (f2El) f2El.textContent = String(c2);
+            if (countLabel) countLabel.textContent = items.length ? `(${items.length})` : '';
+            if (!list) return;
+            if (!items.length) {
+                list.innerHTML = '<p class="text-gray-500 text-xs text-center py-2">No arm attempts detected.</p>';
+                return;
+            }
+            items.sort((a, b) => (a.end_frame || a.start_frame || 0) - (b.end_frame || b.start_frame || 0));
+            list.innerHTML = items.map((a) => {
+                const fNum = a.fencer === 'fencer1' ? 1 : 2;
+                const color = fNum === 1 ? 'bg-blue-500' : 'bg-red-500';
+                const t = (a.end_sec != null) ? a.end_sec : (a.start_sec || 0);
+                const peak = (a.peak_angle != null) ? Math.round(a.peak_angle) : '—';
+                const spd = (a.peak_speed_deg_s != null) ? Math.round(a.peak_speed_deg_s) : '—';
+                const arm = a.arm || '';
+                return `<button type="button" onclick="seekToArmAttempt(${Number(t)})"
+                    class="w-full text-left px-2 py-1.5 rounded hover:bg-gray-600/80 transition flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full ${color} flex-shrink-0"></span>
+                    <span class="text-xs font-medium text-gray-200 w-8">F${fNum}</span>
+                    <span class="text-xs text-gray-400 tabular-nums flex-1">${formatTime(t)}</span>
+                    <span class="text-[10px] text-gray-500">${arm}</span>
+                    <span class="text-[10px] text-gray-400 tabular-nums">${peak}° · ${spd}°/s</span>
+                </button>`;
+            }).join('');
+            list.classList.toggle('hidden', !_armAttemptsExpanded);
+        }
+
+        function formatPreTouchLabel(key) {
+            if (typeof formatFootworkAggressorLabel === 'function') {
+                return formatFootworkAggressorLabel(key);
+            }
+            if (key === 'fencer1') return 'Fencer 1 advanced more';
+            if (key === 'fencer2') return 'Fencer 2 advanced more';
+            if (key === 'even' || key === 'both' || key === 'neither') return 'Even (similar advance)';
+            return 'Unclear';
+        }
+
+        function formatSignedSpeed(v) {
+            if (typeof v !== 'number' || isNaN(v)) return '—';
+            return (v >= 0 ? '+' : '') + v.toFixed(2);
+        }
+
+        function updateSpatialBoutSummary() {
+            const footMainEl = document.getElementById('spatialFootworkAggressor');
+            const footSplitEl = document.getElementById('spatialFootworkSplit');
+            if (!footMainEl && !footSplitEl) return;
+
+            const touchNames = (typeof allResults !== 'undefined' && Array.isArray(allResults))
+                ? allResults.map(function (r) { return r.touch; }).filter(Boolean)
+                : [];
+            let foot = null;
+            if (typeof getPreTouchAggressorSummary === 'function') {
+                foot = getPreTouchAggressorSummary(touchNames);
+            } else if (ARM_ATTEMPTS_CACHE && ARM_ATTEMPTS_CACHE.pre_touch_aggressor) {
+                foot = ARM_ATTEMPTS_CACHE.pre_touch_aggressor;
+            }
+            if (foot && foot.touches_scored > 0) {
+                if (footMainEl) {
+                    footMainEl.textContent = formatPreTouchLabel(foot.main_footwork_aggressor);
+                }
+                if (footSplitEl) {
+                    footSplitEl.textContent =
+                        `F1 ${foot.fencer1_pre_touch_aggression ?? 0}  ·  F2 ${foot.fencer2_pre_touch_aggression ?? 0}` +
+                        `  ·  even ${foot.even ?? foot.neither_advancing ?? 0}`;
+                }
+            } else {
+                if (footMainEl) footMainEl.textContent = 'No footwork data';
+                if (footSplitEl) footSplitEl.textContent = 'Needs forward/back bout scan';
+            }
+        }
+
+        function updateSpatialTouchRowForTouch(touchName) {
+            const preEl = document.getElementById('spatialPreTouchAggressor');
+            const scoresEl = document.getElementById('spatialAdvanceScores');
+            if (!preEl && !scoresEl) return;
+
+            const ts = touchName && THREE_D_CACHE[touchName] ? THREE_D_CACHE[touchName].touch_spatial : null;
+            let scored = null;
+            if (ts && ts.pre_touch_aggressor) {
+                scored = {
+                    aggressor: ts.pre_touch_aggressor,
+                    fencer1: ts.pre_touch_footwork && ts.pre_touch_footwork.fencer1,
+                    fencer2: ts.pre_touch_footwork && ts.pre_touch_footwork.fencer2,
+                };
+            } else if (typeof getPreTouchAggressorForTouch === 'function' && touchName) {
+                scored = getPreTouchAggressorForTouch(touchName);
+            }
+
+            if (scored && scored.aggressor) {
+                if (preEl) preEl.textContent = formatPreTouchLabel(scored.aggressor);
+                if (scoresEl) {
+                    const f1 = scored.fencer1;
+                    const f2 = scored.fencer2;
+                    if (f1 && f2 && typeof (f1.forward_frac ?? f1.advance_score) === 'number') {
+                        const d1 = f1.forward_frac != null ? f1.forward_frac : f1.advance_score;
+                        const d2 = f2.forward_frac != null ? f2.forward_frac : f2.advance_score;
+                        scoresEl.textContent =
+                            `F1 ${Math.round(d1 * 100)}%  ·  F2 ${Math.round(d2 * 100)}%`;
+                    } else {
+                        scoresEl.textContent = '—';
+                    }
+                }
+            } else {
+                if (preEl) preEl.textContent = '—';
+                if (scoresEl) scoresEl.textContent = '—';
+            }
+        }
+
+        function setAnalysisMetricsView(mode) {
+            window._analysisMetricsView = mode === 'spatial' ? 'spatial' : 'angles';
+            const angPanel = document.getElementById('angleMetricsPanel');
+            const spPanel = document.getElementById('spatialTouchPanel');
+            const anglesGuide = document.getElementById('anglesGuide');
+            const bAng = document.getElementById('analysisViewAngles');
+            const bSp = document.getElementById('analysisViewSpatial');
+            if (angPanel && spPanel) {
+                angPanel.classList.toggle('hidden', window._analysisMetricsView !== 'angles');
+                spPanel.classList.toggle('hidden', window._analysisMetricsView !== 'spatial');
+            }
+            if (anglesGuide) {
+                anglesGuide.classList.toggle('hidden', window._analysisMetricsView !== 'angles');
+            }
+            if (bAng && bSp) {
+                const isA = window._analysisMetricsView === 'angles';
+                bAng.classList.toggle('bg-blue-600', isA);
+                bAng.classList.toggle('bg-gray-700', !isA);
+                bSp.classList.toggle('bg-blue-600', !isA);
+                bSp.classList.toggle('bg-gray-700', isA);
+            }
+            if (window._analysisMetricsView === 'spatial') {
+                updateSpatialBoutSummary();
+            }
+            const frameNav = document.getElementById('analysisFrameNavRow');
+            if (frameNav) {
+                frameNav.classList.toggle('hidden', window._analysisMetricsView === 'spatial');
+            }
+        }
+
+        function touchSummaryLabel(touchId) {
+            if (!touchId || typeof touchId !== 'string') return touchId || '';
+            const fm = touchId.match(/frame(\d+)/);
+            const frame = fm ? parseInt(fm[1], 10) : 0;
+            const fencer = touchId.includes('fencer1') ? 'Fencer 1' : touchId.includes('fencer2') ? 'Fencer 2' : '';
+            const t = frame / (VIDEO_FPS || 30);
+            const m = Math.floor(t / 60);
+            const s = Math.floor(t % 60);
+            const ms = Math.floor((t % 1) * 100);
+            const timeStr = `${m}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+            return fencer ? `${fencer} @ ${timeStr} (frame ${frame})` : touchId;
+        }
+
+        function renderDeletedTouchesPanel() {
+            const panel = document.getElementById('deletedTouchesPanel');
+            const ul = document.getElementById('deletedTouchesList');
+            const heading = document.getElementById('deletedTouchesHeading');
+            if (!panel || !ul) return;
+            if (!deletedTouchIds.length) {
+                panel.classList.add('hidden');
+                ul.innerHTML = '';
+                return;
+            }
+            panel.classList.remove('hidden');
+            if (heading) {
+                heading.textContent = window.resultsReadOnly
+                    ? 'Removed touches (excluded from scoring)'
+                    : 'Removed touches (restore if needed)';
+            }
+            const ro = window.resultsReadOnly;
+            ul.innerHTML = deletedTouchIds.map(tid => `
+                <li class="flex items-center justify-between gap-2 bg-gray-800/80 rounded-lg px-3 py-2">
+                    <span class="text-gray-300">${touchSummaryLabel(tid)}</span>
+                    ${ro ? '' : `<button type="button" onclick='restoreDeletedTouch(${JSON.stringify(tid)})' class="text-xs px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded shrink-0">Restore</button>`}
+                </li>
+            `).join('');
+        }
+
+        function apiFetch(url, opts = {}) {
+            return fetch(url, { ...opts, credentials: 'same-origin' });
+        }
+
+        const LAYOUT_MQ = window.matchMedia('(max-width: 1023px)');
+        let mobileSwipeIndex = 0;
+        let mobileSwipeBound = false;
+
+        function isMobileLayout() {
+            return LAYOUT_MQ.matches;
+        }
+
+        function setMobileSwipeSlide(index) {
+            mobileSwipeIndex = Math.max(0, Math.min(1, index));
+            const track = document.getElementById('mobileSwipeTrack');
+            if (track) track.style.transform = `translateX(-${mobileSwipeIndex * 100}%)`;
+            document.getElementById('swipeTabAnalysis')?.classList.toggle('active', mobileSwipeIndex === 0);
+            document.getElementById('swipeTab3d')?.classList.toggle('active', mobileSwipeIndex === 1);
+            document.getElementById('swipeDot0')?.classList.toggle('active', mobileSwipeIndex === 0);
+            document.getElementById('swipeDot1')?.classList.toggle('active', mobileSwipeIndex === 1);
+            if (mobileSwipeIndex === 0 && window.currentAnalysisData) {
+                setTimeout(() => drawExtensionChart(window.currentAnalysisData), 50);
+            }
+            if (mobileSwipeIndex === 1 && typeof window.refresh3DViewerSize === 'function') {
+                requestAnimationFrame(() => window.refresh3DViewerSize());
+            }
+        }
+
+        function initMobileSwipe() {
+            if (mobileSwipeBound) return;
+            mobileSwipeBound = true;
+            document.getElementById('swipeTabAnalysis')?.addEventListener('click', () => setMobileSwipeSlide(0));
+            document.getElementById('swipeTab3d')?.addEventListener('click', () => setMobileSwipeSlide(1));
+            const viewport = document.getElementById('mobileSwipeViewport');
+            if (!viewport) return;
+            let startX = 0;
+            let currentX = 0;
+            let dragging = false;
+            viewport.addEventListener('touchstart', e => {
+                startX = e.touches[0].clientX;
+                currentX = startX;
+                dragging = true;
+            }, { passive: true });
+            viewport.addEventListener('touchmove', e => {
+                if (!dragging) return;
+                currentX = e.touches[0].clientX;
+            }, { passive: true });
+            viewport.addEventListener('touchend', () => {
+                if (!dragging) return;
+                dragging = false;
+                const diff = currentX - startX;
+                if (Math.abs(diff) > 50) {
+                    setMobileSwipeSlide(mobileSwipeIndex + (diff < 0 ? 1 : -1));
+                }
+            }, { passive: true });
+        }
+
+        function applyResultsLayout() {
+            const summary = document.getElementById('touchLocationSummary');
+            const attackSummary = document.getElementById('attackTypeSummary');
+            const list = document.getElementById('timestampsList');
+            const touchDetail = document.getElementById('touchDetail');
+            const analysisPanel = document.getElementById('analysisPanel');
+            const carousel = document.getElementById('mobileSwipeCarousel');
+            const hostSummaryMobile = document.getElementById('hostSummaryMobile');
+            const hostSummaryDesktop = document.getElementById('hostSummaryDesktop');
+            const hostListDesktop = document.getElementById('hostTouchListDesktop');
+            const hostListMobile = document.getElementById('hostTouchListMobile');
+            const hostListMobileInner = document.getElementById('hostTouchListMobileInner');
+            const anchorTouchDetail = document.getElementById('anchorTouchDetail');
+            const anchorAnalysis = document.getElementById('anchorAnalysis');
+            const slide3d = document.getElementById('mobileSlide3d');
+            const slideAnalysis = document.getElementById('mobileSlideAnalysis');
+
+            if (!summary || !list || !touchDetail || !analysisPanel) return;
+
+            if (isMobileLayout()) {
+                hostSummaryMobile?.appendChild(summary);
+                summary.classList.remove('mt-4');
+                summary.classList.add('mt-0');
+                if (attackSummary) {
+                    hostSummaryMobile?.appendChild(attackSummary);
+                    attackSummary.classList.remove('mt-4');
+                    attackSummary.classList.add('mt-3');
+                }
+
+                hostListMobileInner?.appendChild(list);
+                list.className = 'flex gap-2';
+
+                slideAnalysis?.appendChild(analysisPanel);
+                slide3d?.appendChild(touchDetail);
+                touchDetail.classList.remove('mt-4');
+                touchDetail.classList.add('mt-0');
+
+                anchorTouchDetail?.classList.add('hidden');
+                anchorAnalysis?.classList.add('hidden');
+
+                const hasTouches = allResults.length > 0;
+                hostListMobile?.classList.toggle('hidden', !hasTouches);
+
+                const showCarousel = hasTouches && !touchDetail.classList.contains('hidden');
+                carousel?.classList.toggle('hidden', !showCarousel);
+                if (showCarousel) setMobileSwipeSlide(mobileSwipeIndex);
+            } else {
+                hostSummaryDesktop?.appendChild(summary);
+                summary.classList.add('mt-4');
+                summary.classList.remove('mt-0');
+                if (attackSummary) {
+                    hostSummaryDesktop?.appendChild(attackSummary);
+                    attackSummary.classList.add('mt-4');
+                    attackSummary.classList.remove('mt-3');
+                }
+
+                // Keep touches under "Detected Touches", not after Arm Attempts
+                const hostTimestamps = document.getElementById('hostTimestampsList');
+                (hostTimestamps || hostListDesktop)?.appendChild(list);
+                list.className = 'space-y-2 max-h-64 overflow-y-auto';
+
+                anchorTouchDetail?.appendChild(touchDetail);
+                touchDetail.classList.add('mt-4');
+                touchDetail.classList.remove('mt-0');
+
+                anchorAnalysis?.appendChild(analysisPanel);
+
+                anchorTouchDetail?.classList.remove('hidden');
+                anchorAnalysis?.classList.remove('hidden');
+
+                hostListMobile?.classList.add('hidden');
+                carousel?.classList.add('hidden');
+            }
+
+            if (typeof window.refresh3DViewerSize === 'function') {
+                requestAnimationFrame(() => window.refresh3DViewerSize());
+            }
+            if (window.currentAnalysisData) {
+                setTimeout(() => drawExtensionChart(window.currentAnalysisData), 50);
+            }
+        }
+
+        /**
+         * Seek without fighting the demuxer: wait for metadata if needed, clamp to seekable range,
+         * defer to rAF so we do not run in the same tick as src assignment.
+         */
+        function seekResultsVideoToSeconds(targetSeconds) {
+            const video = document.getElementById('resultsVideo');
+            TouchClip.seekVideoToSeconds(video, targetSeconds);
+        }
+
+        function playSelectedTouchClip() {
+            TouchClip.playSelectedTouchClip();
+        }
+
+        async function copyTouchShareLink() {
+            const idx = window._selectedTouchIdx;
+            const r = allResults[idx];
+            const jobId = resultsJobId || loadedResults?.job_id;
+            await TouchClip.copyTouchShareLink({
+                touchId: r?.touch,
+                jobId,
+                apiFetch,
+            });
+        }
+
+        function openShareTouchWithUser() {
+            const idx = window._selectedTouchIdx;
+            const r = allResults[idx];
+            const jobId = resultsJobId || loadedResults?.job_id;
+            if (!r?.touch || !jobId) {
+                alert('Open a saved analysis while signed in to share with another user.');
+                return;
+            }
+            TouchUserShare.open({
+                jobId,
+                touchId: r.touch,
+                touchRef: r.touch_ref || null,
+                apiFetch,
+                onSuccess(data) {
+                    const go = confirm('Touch shared! Open Messages to view the thread?');
+                    if (go && data.share_url) window.location.href = data.share_url;
+                },
+            });
+        }
+
+        function postTouchToCommunity() {
+            const idx = window._selectedTouchIdx;
+            const r = allResults[idx];
+            const jobId = resultsJobId || loadedResults?.job_id;
+            if (!r?.touch || !jobId) {
+                alert('Open your own saved analysis (signed in) to post a touch publicly.');
+                return;
+            }
+            CommunityShare.open({
+                jobId,
+                touchId: r.touch,
+                touchRef: r.touch_ref || null,
+                kind: 'touch',
+                apiFetch,
+            });
+        }
+
+        function openShareAnalysisWithUser() {
+            const jobId = resultsJobId || loadedResults?.job_id;
+            if (!jobId) {
+                alert('Open your own saved analysis (signed in) to share it.');
+                return;
+            }
+            TouchUserShare.open({
+                jobId,
+                kind: 'analysis',
+                apiFetch,
+                onSuccess(data) {
+                    const go = confirm('Analysis shared! Open Messages to view the thread?');
+                    if (go && data.share_url) window.location.href = data.share_url;
+                },
+            });
+        }
+
+        function postAnalysisToCommunity() {
+            const jobId = resultsJobId || loadedResults?.job_id;
+            if (!jobId) {
+                alert('Open your own saved analysis (signed in) to post it publicly.');
+                return;
+            }
+            CommunityShare.open({
+                jobId,
+                kind: window.CLIPPER_MODE ? 'highlight_reel' : 'analysis',
+                apiFetch,
+            });
+        }
+
+        /** Email links use ?video=&data= (frozen JSON on R2). Replace URL with ?job_id= so reloads use merged DB results. */
+        function canonicalizeResultUrlToJobId(jobId) {
+            if (window.resultsReadOnly) return;
+            if (!jobId || typeof history.replaceState !== 'function') return;
+            try {
+                const u = new URL(window.location.href);
+                u.searchParams.delete('video');
+                u.searchParams.delete('data');
+                u.searchParams.set('job_id', jobId);
+                history.replaceState({}, '', u.toString());
+            } catch (e) {
+                console.warn('canonicalizeResultUrlToJobId', e);
+            }
+        }
+
+        // Analysis state
+        window.currentAnalysisData = null;
+        window.selectedHandedness = 'auto';
+        window.detectedArm = 'right';
+        window.currentFrameIndex = 0;
+        window.animationPaused = false;
+        window.manualFrameOverride = false;
+        window.animationSpeed = 1;
+
+        // 3D viewer state
+        let scene, camera, renderer, controls, skeletonGroup;
+        let skeletonData = null;
+        let currentSkeletonFrame = 0;
+        let animationTimer = null;
+        let isViewerInit = false;
+        let boneLines = [];
+        let jointMeshes = [];
+        let viewerResizeBound = false;
+
+        const H36M_EDGES = [
+            [0, 1], [1, 2], [2, 3],
+            [0, 4], [4, 5], [5, 6],
+            [0, 7], [7, 8], [8, 9], [9, 10],
+            [8, 11], [11, 12], [12, 13],
+            [8, 14], [14, 15], [15, 16],
+        ];
+        const LEFT_ARM_JOINTS = [11, 12, 13];
+        const RIGHT_ARM_JOINTS = [14, 15, 16];
+        const HEAD_NECK_JOINTS = [9, 10];
+        const SKELETON_3D_MAX_HEIGHT = 300;
+        const SKELETON_3D_MIN_CAMERA_DISTANCE = 3.2;
+        const SKELETON_3D_MAX_CAMERA_DISTANCE = 9;
+
+        // ============================================================
+        // File Loading
+        // ============================================================
+        const dropzone = document.getElementById('dropzone');
+        const jsonInput = document.getElementById('jsonInput');
+
+        dropzone.addEventListener('click', () => jsonInput.click());
+        dropzone.addEventListener('dragover', e => {
+            e.preventDefault();
+            dropzone.classList.add('border-blue-500');
+        });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('border-blue-500'));
+        dropzone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropzone.classList.remove('border-blue-500');
+            if (e.dataTransfer.files[0]) loadJsonFile(e.dataTransfer.files[0]);
+        });
+        jsonInput.addEventListener('change', e => {
+            if (e.target.files[0]) loadJsonFile(e.target.files[0]);
+        });
+
+        function loadJsonFile(file) {
+            const status = document.getElementById('loadStatus');
+            status.classList.remove('hidden');
+            status.textContent = 'Loading...';
+            status.className = 'text-sm text-blue-400';
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    processLoadedData(data);
+                    status.textContent = 'Results loaded successfully!';
+                    status.className = 'text-sm text-green-400';
+                } catch (err) {
+                    status.textContent = 'Error loading file: ' + err.message;
+                    status.className = 'text-sm text-red-400';
+                }
+            };
+            reader.onerror = () => {
+                status.textContent = 'Error reading file';
+                status.className = 'text-sm text-red-400';
+            };
+            reader.readAsText(file);
+        }
+
+        function renderHighlightReel() {
+            const card = document.getElementById('highlightReelCard');
+            if (!card) return;
+            if (!window.CLIPPER_MODE) { card.classList.add('hidden'); return; }
+            const url = window._highlightReelUrl;
+            const video = document.getElementById('highlightReelVideo');
+            const statusEl = document.getElementById('highlightReelStatus');
+            const dl = document.getElementById('highlightReelDownload');
+            card.classList.remove('hidden');
+            if (url) {
+                if (video) { video.src = url; video.load(); }
+                if (dl) { dl.href = url; dl.classList.remove('hidden'); }
+                if (statusEl) statusEl.textContent = 'Every detected touch, stitched together.';
+            } else {
+                if (video) video.removeAttribute('src');
+                if (dl) dl.classList.add('hidden');
+                if (statusEl) statusEl.textContent = 'No highlight reel is available for this clip.';
+            }
+        }
+
+        function markLlmCoachingStale() {
+            window._llmAnalysisStale = true;
+            const badge = document.getElementById('llmStaleBadge');
+            if (badge) badge.classList.remove('hidden');
+            const status = document.getElementById('llmCoachingStatus');
+            if (status && window._llmAnalysis) {
+                status.textContent = 'Corrections saved. Rerun analysis to refresh coaching.';
+            }
+        }
+
+        function fillBoutMacroEditor() {
+            const panel = document.getElementById('boutMacroEditor');
+            if (!panel) return;
+            const canEdit = !!resultsJobId && !window.resultsReadOnly && !window.CLIPPER_MODE;
+            panel.classList.toggle('hidden', !canEdit);
+            if (!canEdit) return;
+            const arm = (typeof ARM_ATTEMPTS_CACHE !== 'undefined' && ARM_ATTEMPTS_CACHE) ? ARM_ATTEMPTS_CACHE : {};
+            const pre = arm.pre_touch_aggressor || {};
+            const setVal = (id, v) => {
+                const el = document.getElementById(id);
+                if (el && v != null && v !== '') el.value = v;
+            };
+            setVal('macroF1Arm', arm.fencer1_total ?? 0);
+            setVal('macroF2Arm', arm.fencer2_total ?? 0);
+            setVal('macroFootAggressor', pre.main_footwork_aggressor || 'even');
+            setVal('macroF1Pre', pre.fencer1_pre_touch_aggression ?? 0);
+            setVal('macroF2Pre', pre.fencer2_pre_touch_aggression ?? 0);
+        }
+
+        async function saveBoutMacroCorrections() {
+            const status = document.getElementById('macroSaveStatus');
+            if (!resultsJobId) {
+                if (status) status.textContent = 'Open results from your account to edit.';
+                return;
+            }
+            const num = (id) => {
+                const v = parseInt(document.getElementById(id)?.value, 10);
+                return Number.isFinite(v) && v >= 0 ? v : 0;
+            };
+            const body = {
+                arm_attempts: {
+                    fencer1_total: num('macroF1Arm'),
+                    fencer2_total: num('macroF2Arm'),
+                    pre_touch_aggressor: {
+                        main_footwork_aggressor: document.getElementById('macroFootAggressor')?.value || 'even',
+                        fencer1_pre_touch_aggression: num('macroF1Pre'),
+                        fencer2_pre_touch_aggression: num('macroF2Pre'),
+                    },
+                },
+            };
+            if (status) status.textContent = 'Saving...';
+            try {
+                const res = await apiFetch(`/api/queue/jobs/${resultsJobId}/macro-corrections`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Save failed');
+                const p = data.results;
+                if (p['3d_results']) THREE_D_CACHE = p['3d_results'];
+                showResults(p);
+                markLlmCoachingStale();
+                if (status) status.textContent = 'Saved';
+                setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+            } catch (e) {
+                if (status) status.textContent = e.message || String(e);
+            }
+        }
+
+        function escapeHtml(s) {
+            return String(s || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function renderLlmCoachingPanel() {
+            const panel = document.getElementById('llmCoachingPanel');
+            if (!panel) return;
+            // Styles screen owns the LLM archetypes; keep this panel for detail view only.
+            if (window.CLIPPER_MODE || document.body.classList.contains('archetype-reveal-active')) {
+                panel.classList.add('hidden');
+                return;
+            }
+            const userFencer = window._userFencer;
+            const canRerun = !!resultsJobId && !window.resultsReadOnly && !!userFencer;
+            const stored = window._llmAnalysis;
+            const show = !!userFencer || !!stored;
+            panel.classList.toggle('hidden', !show);
+            if (!show) return;
+
+            const subtitle = document.getElementById('llmCoachingSubtitle');
+            if (subtitle) {
+                subtitle.textContent = 'Your style from this bout, plus drills to practice.';
+            }
+            const badge = document.getElementById('llmStaleBadge');
+            if (badge) badge.classList.toggle('hidden', !window._llmAnalysisStale || !stored);
+            const btn = document.getElementById('rerunLlmBtn');
+            if (btn) {
+                btn.classList.toggle('hidden', !canRerun);
+                btn.disabled = false;
+            }
+            const archLink = document.getElementById('llmArchetypesLink');
+            if (archLink && document.body.dataset.archetypesUrl) {
+                archLink.href = document.body.dataset.archetypesUrl;
+            }
+
+            const body = document.getElementById('llmCoachingBody');
+            const status = document.getElementById('llmCoachingStatus');
+            if (!hasUserLlmAnalysis(stored)) {
+                if (body) body.innerHTML = '';
+                if (status) {
+                    status.textContent = canRerun
+                        ? 'Style analysis still running or missing — use Rerun analysis.'
+                        : (userFencer ? 'Coaching not available on this view.' : '');
+                }
+                return;
+            }
+            if (status && !window._llmAnalysisStale) status.textContent = '';
+            const a = stored.analysis;
+            if (body) {
+                body.innerHTML = (window.FencerArchetype && FencerArchetype.coachingBodyHtml)
+                    ? FencerArchetype.coachingBodyHtml(a, userFencer)
+                    : '';
+            }
+        }
+
+        async function rerunLlmAnalysis(opts) {
+            opts = opts || {};
+            const status = document.getElementById('llmCoachingStatus');
+            const btn = document.getElementById('rerunLlmBtn');
+            if (!resultsJobId) {
+                if (status) status.textContent = 'Open results from your account to rerun.';
+                return;
+            }
+            if (window._llmRunInFlight) return;
+            window._llmRunInFlight = true;
+            if (btn) btn.disabled = true;
+            if (status) status.textContent = 'Running analysis (auto-retries on bad JSON)…';
+            const beforeAt = (window._llmAnalysis && window._llmAnalysis.analyzed_at) || '';
+            let applied = false;
+            const applyLlmResult = function (llm, results) {
+                if (applied) return;
+                applied = true;
+                window._llmRunInFlight = false;
+                const p = results || {};
+                if (p['3d_results']) THREE_D_CACHE = p['3d_results'];
+                if (llm) window._llmAnalysis = llm;
+                window._llmAnalysisStale = false;
+                if (p.user_fencer) window._userFencer = p.user_fencer;
+                if (window.FencerArchetype && FencerArchetype.applyLlmToReveal) {
+                    FencerArchetype.applyLlmToReveal(window._llmAnalysis, {
+                        userFencer: window._userFencer,
+                        llmPending: false,
+                        llmStale: false,
+                    });
+                }
+                if (results) {
+                    const prevAuto = window._llmAutoStarted;
+                    window._llmAutoStarted = true;
+                    showResults(p);
+                    window._llmAutoStarted = prevAuto;
+                } else if (typeof renderLlmCoachingPanel === 'function') {
+                    renderLlmCoachingPanel();
+                }
+            };
+            if (window.FencerArchetype && FencerArchetype.applyLlmToReveal) {
+                FencerArchetype.applyLlmToReveal(window._llmAnalysis, {
+                    userFencer: window._userFencer,
+                    llmPending: true,
+                });
+            }
+            const pollTask = pollLlmAnalysisUpdate(resultsJobId, beforeAt, 12 * 60 * 1000).then(function (llm) {
+                if (llm && !applied) applyLlmResult(llm, null);
+                return llm;
+            });
+            const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            const abortTimer = controller
+                ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, 3 * 60 * 1000)
+                : null;
+            try {
+                const res = await apiFetch(`/api/queue/jobs/${resultsJobId}/llm-analysis`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}',
+                    signal: controller ? controller.signal : undefined,
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Analysis failed');
+                const p = data.results || {};
+                const llm = p.llm_analysis || data.llm_analysis || null;
+                applyLlmResult(llm, p);
+                if (status) status.textContent = opts.silent ? '' : 'Updated';
+                if (!opts.silent) setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+            } catch (e) {
+                let polled = null;
+                try {
+                    polled = await Promise.race([
+                        pollTask,
+                        _llmSleep(45000).then(function () { return null; }),
+                    ]);
+                } catch (e2) { /* ignore */ }
+                if (!applied && polled) {
+                    applyLlmResult(polled, null);
+                    if (status) status.textContent = opts.silent ? '' : 'Updated';
+                } else if (!applied) {
+                    const msg = (e && e.name === 'AbortError')
+                        ? 'Coaching notes are taking longer than expected — try Rerun coaching notes, or refresh in a moment.'
+                        : (e.message || String(e));
+                    if (status) status.textContent = msg;
+                    if (window.FencerArchetype && FencerArchetype.applyLlmToReveal) {
+                        FencerArchetype.applyLlmToReveal(window._llmAnalysis, {
+                            userFencer: window._userFencer,
+                            llmPending: false,
+                            llmError: msg,
+                        });
+                    }
+                }
+            } finally {
+                if (abortTimer) clearTimeout(abortTimer);
+                window._llmRunInFlight = false;
+                if (btn) btn.disabled = false;
+                if (window.FencerArchetype && FencerArchetype.applyLlmToReveal) {
+                    FencerArchetype.applyLlmToReveal(window._llmAnalysis, {
+                        userFencer: window._userFencer,
+                        llmPending: false,
+                        llmStale: !!window._llmAnalysisStale,
+                    });
+                }
+            }
+        }
+
+        window.renderLlmCoachingPanel = renderLlmCoachingPanel;
+        window.rerunLlmAnalysis = rerunLlmAnalysis;
+
+        function processLoadedData(data, opts) {
+            opts = opts || {};
+            window.resultsReadOnly = !!opts.readOnly;
+            const guestBanner = document.getElementById('guestViewBanner');
+            if (guestBanner) guestBanner.classList.toggle('hidden', !window.resultsReadOnly);
+
+            // Clipper jobs: highlight reel + touch clips only (no 3D/body-target analysis).
+            window.CLIPPER_MODE = (data.job_type === 'clipper') || (!!data.highlight_reel_url && !(data['3d_results'] || data.three_d_results));
+            document.body.classList.toggle('clipper-mode', !!window.CLIPPER_MODE);
+            window._highlightReelUrl = data.highlight_reel_url || null;
+            renderHighlightReel();
+
+            loadedResults = data;
+
+            // Extract data
+            const urlJobId = new URLSearchParams(window.location.search).get('job_id');
+            VIDEO_FPS = data.fps || 30;
+            THREE_D_CACHE = data.three_d_results || data['3d_results'] || {};
+            if ('arm_attempts' in data) {
+                setArmAttemptsCache(data.arm_attempts);
+            }
+            allResults = data.predictions || [];
+            const rawJobId = data.job_id || urlJobId || null;
+            resultsJobId = window.resultsReadOnly ? null : rawJobId;
+            window._displayJobId = rawJobId;
+            deletedTouchIds = data.deleted_touch_ids || [];
+            window._spatialTouchSummaryFromServer = data.spatial_touch_summary || null;
+            window._userFencer = data.user_fencer || null;
+            window._llmAnalysis = data.llm_analysis || null;
+            window._llmAnalysisStale = !!data.llm_analysis_stale;
+            const canEdit = !!resultsJobId && !window.resultsReadOnly;
+            const ce = document.getElementById('correctionEditor');
+            if (ce) ce.classList.toggle('hidden', !canEdit);
+            const tne = document.getElementById('touchNoteEditor');
+            if (tne) tne.classList.toggle('hidden', !canEdit);
+            const tde = document.getElementById('touchDeleteEditor');
+            if (tde) tde.classList.toggle('hidden', !canEdit);
+            const macroEd = document.getElementById('boutMacroEditor');
+            if (macroEd) macroEd.classList.toggle('hidden', !canEdit || !!window.CLIPPER_MODE);
+            TouchClip.updateTouchShareEditor(!!resultsJobId);
+
+            const postBtn = document.getElementById('postAnalysisCommunityBtn');
+            if (postBtn) {
+                postBtn.classList.toggle('hidden', !resultsJobId);
+                const lbl = document.getElementById('postAnalysisCommunityLabel');
+                if (lbl) lbl.textContent = window.CLIPPER_MODE ? 'Post reel to Community' : 'Post to Community';
+            }
+            const shareUserBtn = document.getElementById('shareAnalysisUserBtn');
+            if (shareUserBtn) {
+                shareUserBtn.classList.toggle('hidden', !resultsJobId);
+            }
+
+            // Set up video
+            const videoUrl = data.video_url;
+            if (videoUrl) {
+                const video = document.getElementById('resultsVideo');
+                const statusEl = document.getElementById('videoStatus');
+                statusEl.textContent = 'Loading video…';
+                const markReady = () => { statusEl.textContent = ''; };
+                video.addEventListener('canplay', markReady, { once: true });
+                video.addEventListener('error', () => {
+                    statusEl.textContent = 'Could not load video (check connection or file).';
+                }, { once: true });
+                video.src = videoUrl;
+                video.load();
+                if (video.readyState >= 3) markReady();
+                document.getElementById('videoNameDisplay').textContent = `Video: ${rawJobId || 'Analysis'}`;
+            } else {
+                document.getElementById('videoStatus').textContent = 'No video URL in results file';
+            }
+
+            // Show results
+            document.getElementById('load-section').classList.add('hidden');
+            document.getElementById('results-section').classList.remove('hidden');
+
+            showResults({
+                predictions: allResults,
+                deleted_touch_ids: deletedTouchIds,
+                spatial_touch_summary: data.spatial_touch_summary || null,
+                arm_attempts: data.arm_attempts || null,
+                user_fencer: data.user_fencer || null,
+                llm_analysis: data.llm_analysis || null,
+                llm_analysis_stale: !!data.llm_analysis_stale,
+            });
+        }
+
+        // ============================================================
+        // Results Display (matching demo.html)
+        // ============================================================
+        function showResults(results) {
+            if (results && typeof results === 'object' && !Array.isArray(results) && Array.isArray(results.predictions)) {
+                allResults = results.predictions;
+                if ('deleted_touch_ids' in results && Array.isArray(results.deleted_touch_ids)) {
+                    deletedTouchIds = results.deleted_touch_ids;
+                }
+                if ('spatial_touch_summary' in results) {
+                    window._spatialTouchSummaryFromServer = results.spatial_touch_summary || null;
+                }
+                if ('arm_attempts' in results) {
+                    setArmAttemptsCache(results.arm_attempts);
+                }
+                if ('user_fencer' in results) window._userFencer = results.user_fencer || null;
+                if ('llm_analysis' in results) window._llmAnalysis = results.llm_analysis || null;
+                if ('llm_analysis_stale' in results) window._llmAnalysisStale = !!results.llm_analysis_stale;
+            } else {
+                allResults = Array.isArray(results) ? results : [];
+                deletedTouchIds = [];
+            }
+
+            fillBoutMacroEditor();
+            renderLlmCoachingPanel();
+
+            const container = document.getElementById('timestampsList');
+            const colors = { chest: 'bg-red-600', abdomen: 'bg-orange-600', arm: 'bg-blue-600', leg: 'bg-green-600' };
+
+            if (!allResults.length) {
+                if (container) container.innerHTML = '<p class="text-gray-400 text-center py-4 text-sm">No touches detected.</p>';
+                document.getElementById('touchDetail').classList.add('hidden');
+                document.getElementById('fencer1Score').textContent = '0';
+                document.getElementById('fencer2Score').textContent = '0';
+                document.getElementById('touchLocationSummary').classList.add('hidden');
+                document.getElementById('attackTypeSummary')?.classList.add('hidden');
+                document.getElementById('hostTouchListMobile')?.classList.add('hidden');
+                document.getElementById('mobileSwipeCarousel')?.classList.add('hidden');
+                window._spatialTouchSummaryFromServer = null;
+                renderDeletedTouchesPanel();
+                updateSpatialBoutSummary();
+                updateSpatialTouchRowForTouch(null);
+                renderArmAttempts();
+                applyResultsLayout();
+                if (typeof initForwardBackOverlay === 'function') initForwardBackOverlay();
+                if (window.FencerArchetype) {
+                    FencerArchetype.enterRevealOrDetail([], []);
+                }
+                return;
+            }
+
+            // Parse and sort by frame number
+            TouchClip.ensureTouchRefs(allResults, resultsJobId || window._displayJobId);
+            const parsed = allResults.map((r, idx) => {
+                const frameMatch = r.touch.match(/frame(\d+)/);
+                const frame = frameMatch ? parseInt(frameMatch[1]) : 0;
+                const fencer = r.touch.includes('fencer1') ? 'Fencer 1' : 'Fencer 2';
+                const fencerNum = r.touch.includes('fencer1') ? 1 : 2;
+                return { ...r, idx, frame, fencer, fencerNum, time: frame / VIDEO_FPS };
+            }).sort((a, b) => a.frame - b.frame);
+
+            // Calculate scores
+            const fencer1Touches = parsed.filter(r => r.fencerNum === 1);
+            const fencer2Touches = parsed.filter(r => r.fencerNum === 2);
+            document.getElementById('fencer1Score').textContent = fencer1Touches.length;
+            document.getElementById('fencer2Score').textContent = fencer2Touches.length;
+
+            // Build touch location charts
+            updateTouchLocationChart('fencer1TouchChart', fencer1Touches);
+            updateTouchLocationChart('fencer2TouchChart', fencer2Touches);
+            document.getElementById('touchLocationSummary').classList.remove('hidden');
+
+            const hasAttack = parsed.some(r => r.attack_prediction);
+            if (hasAttack) {
+                updateAttackTypeChart('fencer1AttackChart', fencer1Touches);
+                updateAttackTypeChart('fencer2AttackChart', fencer2Touches);
+                document.getElementById('attackTypeSummary')?.classList.remove('hidden');
+            } else {
+                document.getElementById('attackTypeSummary')?.classList.add('hidden');
+            }
+
+            rebuildTouchList(parsed);
+
+            renderDeletedTouchesPanel();
+
+            updateSpatialBoutSummary();
+
+            renderArmAttempts();
+
+            applyResultsLayout();
+            if (typeof initForwardBackOverlay === 'function') initForwardBackOverlay();
+            initMobileSwipe();
+
+            TouchClip.selectInitialTouch(parsed, selectTouch);
+
+            if (window.FencerArchetype) {
+                FencerArchetype.enterRevealOrDetail(fencer1Touches, fencer2Touches, {
+                    llmAnalysis: window._llmAnalysis,
+                    userFencer: window._userFencer,
+                    llmPending: !!window._llmRunInFlight,
+                    llmStale: !!window._llmAnalysisStale,
+                });
+            }
+            maybeAutoRunLlmAnalysis();
+        }
+
+        function hasUserLlmAnalysis(stored) {
+            if (window.FencerArchetype && FencerArchetype.hasUserLlmAnalysis) {
+                return FencerArchetype.hasUserLlmAnalysis(stored);
+            }
+            const a = stored && stored.analysis;
+            return !!(a && a.archetype_id && a.rationale && (a.practice_suggestions || []).length >= 3);
+        }
+
+        function maybeAutoRunLlmAnalysis() {
+            if (window.CLIPPER_MODE || window.resultsReadOnly || !resultsJobId || !window._userFencer) return;
+            if (window._llmRunInFlight) return;
+            if (hasUserLlmAnalysis(window._llmAnalysis) && !window._llmAnalysisStale) return;
+            if (window._llmAutoStarted) return;
+            window._llmAutoStarted = true;
+            rerunLlmAnalysis({ silent: true });
+        }
+
+        function _llmSleep(ms) {
+            return new Promise(function (resolve) { setTimeout(resolve, ms); });
+        }
+
+        async function fetchStoredLlmAnalysis(jobId) {
+            const res = await apiFetch(`/api/queue/results/${encodeURIComponent(jobId)}`);
+            const data = await res.json().catch(function () { return null; });
+            if (!data || !data.success) return null;
+            const r = data.results || data;
+            return r.llm_analysis || null;
+        }
+
+        async function pollLlmAnalysisUpdate(jobId, beforeAnalyzedAt, maxMs) {
+            const deadline = Date.now() + (maxMs || 180000);
+            while (Date.now() < deadline) {
+                await _llmSleep(2500);
+                try {
+                    const llm = await fetchStoredLlmAnalysis(jobId);
+                    if (!llm) continue;
+                    const at = llm.analyzed_at || '';
+                    if (at && at !== (beforeAnalyzedAt || '')) return llm;
+                } catch (e) { /* keep polling */ }
+            }
+            return null;
+        }
+
+        function rebuildTouchList(parsed) {
+            const container = document.getElementById('timestampsList');
+            if (!container) return;
+            const colors = { chest: 'bg-red-600', abdomen: 'bg-orange-600', arm: 'bg-blue-600', leg: 'bg-green-600' };
+            const attackColors = { lunge: 'bg-violet-600', fleche: 'bg-cyan-600', other: 'bg-amber-600' };
+            const attackLabel = (pred) => (window.FencerArchetype && FencerArchetype.displayAttackLabel(pred)) || pred || '';
+
+            const dotColor = (r) => window.CLIPPER_MODE ? (r.fencerNum === 1 ? 'bg-blue-500' : 'bg-red-500') : (colors[r.prediction] || 'bg-gray-500');
+            if (isMobileLayout()) {
+                container.innerHTML = parsed.map((r) => `
+                    <button onclick="selectTouch(${r.idx})"
+                        class="shrink-0 min-w-[9.5rem] max-w-[12rem] text-left p-2.5 rounded-lg hover:bg-gray-600 transition flex flex-col gap-1 touch-btn border border-transparent"
+                        data-idx="${r.idx}">
+                        ${r.touch_ref ? `<span class="text-[10px] font-mono text-sky-400/90 truncate">${r.touch_ref}</span>` : ''}
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full shrink-0 ${dotColor(r)}"></span>
+                            <span class="text-xs font-medium truncate">${r.fencer}</span>
+                        </div>
+                        <span class="text-[10px] text-gray-400 truncate">${formatTime(r.time)} · f${r.frame}</span>
+                        ${window.CLIPPER_MODE ? '' : `<div class="flex flex-col gap-1 self-start w-full">
+                            <span class="text-[10px] font-semibold uppercase ${colors[r.prediction] || 'bg-gray-500'} px-1.5 py-0.5 rounded w-fit">${r.prediction || ''}</span>
+                            ${r.attack_prediction ? `<span class="text-[10px] font-semibold leading-snug ${attackColors[r.attack_prediction] || 'bg-gray-500'} px-1.5 py-0.5 rounded text-left">${attackLabel(r.attack_prediction)}</span>` : ''}
+                        </div>`}
+                    </button>
+                `).join('');
+            } else {
+                container.innerHTML = parsed.map((r) => `
+                    <button onclick="selectTouch(${r.idx})"
+                        class="w-full text-left p-3 rounded-lg hover:bg-gray-600 transition flex items-start gap-3 touch-btn"
+                        data-idx="${r.idx}">
+                        <span class="w-2 h-2 rounded-full ${dotColor(r)} mt-1.5 shrink-0"></span>
+                        <div class="flex-1 min-w-0 space-y-1">
+                            ${r.touch_ref ? `<p class="text-xs font-mono text-sky-400/90 truncate">${r.touch_ref}</p>` : ''}
+                            <p class="text-sm font-medium leading-snug">${r.fencer} Touch</p>
+                            <p class="text-xs text-gray-400">${formatTime(r.time)} (frame ${r.frame})</p>
+                            ${window.CLIPPER_MODE ? '' : `<div class="flex flex-col items-start gap-1 pt-0.5">
+                                <span class="text-xs font-semibold uppercase ${colors[r.prediction] || 'bg-gray-500'} px-2 py-1 rounded">${r.prediction || ''}</span>
+                                ${r.attack_prediction ? `<span class="text-[11px] font-semibold leading-snug ${attackColors[r.attack_prediction] || 'bg-gray-500'} px-2 py-1 rounded text-left">${attackLabel(r.attack_prediction)}</span>` : ''}
+                            </div>`}
+                        </div>
+                    </button>
+                `).join('');
+            }
+        }
+
+        function updateTouchLocationChart(containerId, touches) {
+            const container = document.getElementById(containerId);
+            const locations = ['chest', 'abdomen', 'arm', 'leg'];
+            const locationColors = {
+                chest: { bar: 'bg-red-500' },
+                abdomen: { bar: 'bg-orange-500' },
+                arm: { bar: 'bg-blue-500' },
+                leg: { bar: 'bg-green-500' }
+            };
+
+            const counts = {};
+            locations.forEach(loc => counts[loc] = 0);
+            touches.forEach(t => {
+                if (counts.hasOwnProperty(t.prediction)) {
+                    counts[t.prediction]++;
+                }
+            });
+
+            const maxCount = Math.max(...Object.values(counts), 1);
+            const total = touches.length;
+
+            if (total === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-sm text-center py-2">No touches recorded</p>';
+                return;
+            }
+
+            container.innerHTML = locations.map(loc => {
+                const count = counts[loc];
+                const percentage = total > 0 ? (count / total * 100).toFixed(0) : 0;
+                const barWidth = maxCount > 0 ? (count / maxCount * 100) : 0;
+
+                return `
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-medium text-gray-400 w-16 capitalize">${loc}</span>
+                        <div class="flex-1 bg-gray-700 rounded-full h-4 overflow-hidden">
+                            <div class="${locationColors[loc].bar} h-full rounded-full transition-all duration-500" style="width: ${barWidth}%"></div>
+                        </div>
+                        <span class="text-sm font-bold text-gray-200 w-8 text-right">${count}</span>
+                        <span class="text-xs text-gray-500 w-10 text-right">(${percentage}%)</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateAttackTypeChart(containerId, touches) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const types = ['lunge', 'fleche', 'other'];
+            const typeColors = {
+                lunge: { bar: 'bg-violet-500' },
+                fleche: { bar: 'bg-cyan-500' },
+                other: { bar: 'bg-amber-500' }
+            };
+            const withAttack = touches.filter(t => t.attack_prediction);
+            const counts = {};
+            types.forEach(t => counts[t] = 0);
+            withAttack.forEach(t => {
+                if (counts.hasOwnProperty(t.attack_prediction)) {
+                    counts[t.attack_prediction]++;
+                }
+            });
+            const maxCount = Math.max(...Object.values(counts), 1);
+            const total = withAttack.length;
+            if (total === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-sm text-center py-2">No attack types predicted</p>';
+                return;
+            }
+            container.innerHTML = types.map(type => {
+                const count = counts[type];
+                const percentage = total > 0 ? (count / total * 100).toFixed(0) : 0;
+                const barWidth = maxCount > 0 ? (count / maxCount * 100) : 0;
+                const label = (window.FencerArchetype && FencerArchetype.displayAttackLabel(type)) || type;
+                return `
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-medium text-gray-400 w-36 sm:w-44 shrink-0 leading-tight">${label}</span>
+                        <div class="flex-1 bg-gray-700 rounded-full h-4 overflow-hidden">
+                            <div class="${typeColors[type].bar} h-full rounded-full transition-all duration-500" style="width: ${barWidth}%"></div>
+                        </div>
+                        <span class="text-sm font-bold text-gray-200 w-8 text-right">${count}</span>
+                        <span class="text-xs text-gray-500 w-10 text-right">(${percentage}%)</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 100);
+            return `${m}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+        }
+
+        function selectTouch(idx) {
+            const r = allResults[idx];
+            if (!r) return;
+
+            const frameMatch = r.touch.match(/frame(\d+)/);
+            const frame = frameMatch ? parseInt(frameMatch[1]) : 0;
+            const fencer = r.touch.includes('fencer1') ? 'Fencer 1' : 'Fencer 2';
+            const time = frame / VIDEO_FPS;
+
+            TouchClip.onTouchSelected(frame, VIDEO_FPS);
+
+            // Highlight selected button
+            document.querySelectorAll('.touch-btn').forEach(btn => {
+                const selected = btn.dataset.idx == idx;
+                btn.classList.toggle('bg-gray-600', selected);
+                if (isMobileLayout()) {
+                    btn.classList.toggle('border-blue-500/50', selected);
+                }
+            });
+            const activeBtn = document.querySelector(`.touch-btn[data-idx="${idx}"]`);
+            if (activeBtn && isMobileLayout()) {
+                activeBtn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+            }
+
+            window._selectedTouchIdx = idx;
+
+            // Clipper jobs have no 3D / body-target detail — just clip playback + sharing.
+            if (window.CLIPPER_MODE) {
+                applyResultsLayout();
+                return;
+            }
+
+            // Show detail
+            const colors = { chest: 'from-red-600 to-red-800', abdomen: 'from-orange-600 to-orange-800', arm: 'from-blue-600 to-blue-800', leg: 'from-green-600 to-green-800' };
+            const labels = ['chest', 'abdomen', 'arm', 'leg'];
+
+            document.getElementById('touchDetail').classList.remove('hidden');
+            document.getElementById('detailTitle').textContent = `${fencer} - Touch Detected`;
+            const refEl = document.getElementById('detailTouchRef');
+            if (refEl) {
+                if (r.touch_ref) {
+                    refEl.textContent = `Touch ID: ${r.touch_ref}`;
+                    refEl.classList.remove('hidden');
+                } else {
+                    refEl.textContent = '';
+                    refEl.classList.add('hidden');
+                }
+            }
+            document.getElementById('detailTime').textContent = `Frame ${frame} - ${formatTime(time)}`;
+            const conf = r.confidence || [];
+            document.getElementById('detailConfidence').innerHTML = conf.map((c, i) =>
+                `<span class="text-xs px-2 py-1 rounded ${i === labels.indexOf(r.prediction) ? 'bg-white/20 ring-1 ring-white/40' : 'bg-gray-600'}">${labels[i]} ${(c*100).toFixed(0)}%</span>`
+            ).join('');
+
+            const predDiv = document.getElementById('detailPrediction');
+            predDiv.className = `bg-gradient-to-r ${colors[r.prediction]} px-6 py-3 rounded-xl`;
+            predDiv.querySelector('span').textContent = r.prediction.toUpperCase();
+
+            const attackPanel = document.getElementById('attackTypePanel');
+            const attackLabels = ['lunge', 'fleche', 'other'];
+            const attackDisplayLabels = ['lunge', 'fleche', 'counter / unconventional strike'];
+            const attackGradients = {
+                lunge: 'from-violet-600 to-violet-800',
+                fleche: 'from-cyan-600 to-cyan-800',
+                other: 'from-amber-600 to-amber-800'
+            };
+            if (attackPanel) {
+                if (r.attack_prediction) {
+                    attackPanel.classList.remove('hidden');
+                    const aconf = r.attack_confidence || [];
+                    document.getElementById('detailAttackConfidence').innerHTML = aconf.map((c, i) =>
+                        `<span class="text-xs px-2 py-1 rounded ${i === attackLabels.indexOf(r.attack_prediction) ? 'bg-white/20 ring-1 ring-white/40' : 'bg-gray-600'}">${attackDisplayLabels[i]} ${(c*100).toFixed(0)}%</span>`
+                    ).join('');
+                    const apredDiv = document.getElementById('detailAttackPrediction');
+                    apredDiv.className = `bg-gradient-to-r ${attackGradients[r.attack_prediction] || 'from-gray-600 to-gray-800'} px-5 py-2 rounded-xl`;
+                    const attackTitle = (window.FencerArchetype && FencerArchetype.displayAttackLabel(r.attack_prediction)) || r.attack_prediction;
+                    apredDiv.querySelector('span').textContent = String(attackTitle).toUpperCase();
+                } else {
+                    attackPanel.classList.add('hidden');
+                }
+            }
+
+            window._selectedTouchIdx = idx;
+            const sel = document.getElementById('correctionSelect');
+            if (sel) sel.value = r.prediction;
+            const atkSel = document.getElementById('attackCorrectionSelect');
+            if (atkSel) atkSel.value = r.attack_prediction || 'other';
+            const note = document.getElementById('modelPredictionNote');
+            if (note) {
+                const bits = [];
+                if (r.prediction_edited && r.model_prediction) {
+                    bits.push('Model originally predicted location: ' + r.model_prediction);
+                }
+                if (r.attack_prediction_edited && r.model_attack_prediction) {
+                    bits.push('Model originally predicted attack: ' + r.model_attack_prediction);
+                }
+                if (bits.length) {
+                    note.textContent = bits.join(' · ');
+                    note.classList.remove('hidden');
+                } else {
+                    note.classList.add('hidden');
+                }
+            }
+            const tni = document.getElementById('touchNoteInput');
+            if (tni) tni.value = typeof r.user_note === 'string' ? r.user_note : '';
+
+            // Load and show 3D skeleton
+            load3DSkeleton(r.touch);
+
+            applyResultsLayout();
+        }
+
+        async function saveTouchCorrection() {
+            const status = document.getElementById('correctionStatus');
+            const idx = window._selectedTouchIdx;
+            const r = allResults[idx];
+            if (!r || !resultsJobId) {
+                if (status) status.textContent = 'Sign in and open results from your account to save edits.';
+                return;
+            }
+            const pred = document.getElementById('correctionSelect')?.value;
+            const attack = document.getElementById('attackCorrectionSelect')?.value;
+            if (status) status.textContent = 'Saving...';
+            try {
+                const body = { touch: r.touch };
+                if (pred) body.prediction = pred;
+                if (attack) body.attack_prediction = attack;
+                const res = await apiFetch(`/api/queue/jobs/${resultsJobId}/prediction-corrections`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Save failed');
+                const p = data.results;
+                if (p['3d_results']) THREE_D_CACHE = p['3d_results'];
+                canonicalizeResultUrlToJobId(resultsJobId);
+                showResults(p);
+                markLlmCoachingStale();
+                if (typeof window._selectedTouchIdx === 'number') selectTouch(window._selectedTouchIdx);
+                if (status) status.textContent = 'Saved';
+                setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+            } catch (e) {
+                if (status) status.textContent = e.message || String(e);
+            }
+        }
+
+        async function saveTouchNote() {
+            const status = document.getElementById('touchNoteStatus');
+            const idx = window._selectedTouchIdx;
+            const r = allResults[idx];
+            if (!r || !resultsJobId) {
+                if (status) status.textContent = 'Sign in and open results from your account to save notes.';
+                return;
+            }
+            const noteVal = document.getElementById('touchNoteInput')?.value ?? '';
+            if (status) status.textContent = 'Saving...';
+            try {
+                const res = await apiFetch(`/api/queue/jobs/${resultsJobId}/prediction-corrections`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ touch: r.touch, note: noteVal })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Save failed');
+                const p = data.results;
+                if (p['3d_results']) THREE_D_CACHE = p['3d_results'];
+                canonicalizeResultUrlToJobId(resultsJobId);
+                showResults(p);
+                markLlmCoachingStale();
+                if (typeof window._selectedTouchIdx === 'number') selectTouch(window._selectedTouchIdx);
+                if (status) status.textContent = 'Saved';
+                setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+            } catch (e) {
+                if (status) status.textContent = e.message || String(e);
+            }
+        }
+
+        async function deleteSelectedTouch() {
+            const status = document.getElementById('touchDeleteStatus');
+            const idx = window._selectedTouchIdx;
+            const r = allResults[idx];
+            if (!r || !resultsJobId) {
+                if (status) status.textContent = 'Open results from your account to remove touches.';
+                return;
+            }
+            if (!confirm('Remove this touch from the list and score totals? You can restore it below if needed.')) return;
+            if (status) status.textContent = 'Saving...';
+            try {
+                const res = await apiFetch(`/api/queue/jobs/${resultsJobId}/touch-deletions`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ touch: r.touch, deleted: true })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Update failed');
+                if (data.results['3d_results']) THREE_D_CACHE = data.results['3d_results'];
+                canonicalizeResultUrlToJobId(resultsJobId);
+                showResults(data.results);
+                markLlmCoachingStale();
+                if (status) status.textContent = 'Removed';
+                setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+            } catch (e) {
+                if (status) status.textContent = e.message || String(e);
+            }
+        }
+
+        async function restoreDeletedTouch(touchId) {
+            if (!resultsJobId || !touchId) return;
+            const status = document.getElementById('touchDeleteStatus');
+            if (status) status.textContent = 'Restoring...';
+            try {
+                const res = await apiFetch(`/api/queue/jobs/${resultsJobId}/touch-deletions`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ touch: touchId, deleted: false })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Restore failed');
+                if (data.results['3d_results']) THREE_D_CACHE = data.results['3d_results'];
+                canonicalizeResultUrlToJobId(resultsJobId);
+                showResults(data.results);
+                markLlmCoachingStale();
+                if (status) status.textContent = 'Restored';
+                setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+            } catch (e) {
+                if (status) status.textContent = e.message || String(e);
+            }
+        }
+
+        // ============================================================
+        // 3D Skeleton Viewer
+        // ============================================================
+        function init3DViewer() {
+            const container = document.getElementById('skeleton3d');
+            if (!container) return;
+
+            if (renderer) {
+                container.innerHTML = '';
+                isViewerInit = false;
+            }
+
+            const w = container.clientWidth || 400;
+            const h = Math.min(container.clientHeight || 300, SKELETON_3D_MAX_HEIGHT);
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+
+            camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
+            camera.position.set(0, 1, 5);
+            camera.lookAt(0, 1, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(w, h);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.domElement.style.display = 'block';
+            renderer.domElement.style.maxWidth = '100%';
+            renderer.domElement.style.maxHeight = SKELETON_3D_MAX_HEIGHT + 'px';
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 1, 0);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.enableZoom = true;
+            controls.enablePan = true;
+            controls.minDistance = SKELETON_3D_MIN_CAMERA_DISTANCE;
+            controls.maxDistance = SKELETON_3D_MAX_CAMERA_DISTANCE;
+            controls.maxPolarAngle = Math.PI * 0.85;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(5, 10, 7);
+            scene.add(dirLight);
+
+            skeletonGroup = new THREE.Group();
+            scene.add(skeletonGroup);
+
+            const boneMat = new THREE.LineBasicMaterial({ color: 0x3b82f6, linewidth: 3 });
+            boneLines = [];
+            for (let i = 0; i < H36M_EDGES.length; i++) {
+                const geom = new THREE.BufferGeometry();
+                const positions = new Float32Array(6);
+                geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const line = new THREE.Line(geom, boneMat);
+                boneLines.push(line);
+                skeletonGroup.add(line);
+            }
+
+            const jointGeom = new THREE.SphereGeometry(0.04, 12, 12);
+            const jointMat = new THREE.MeshPhongMaterial({ color: 0x60a5fa, shininess: 100 });
+            jointMeshes = [];
+            for (let i = 0; i < 17; i++) {
+                const mesh = new THREE.Mesh(jointGeom, jointMat);
+                jointMeshes.push(mesh);
+                skeletonGroup.add(mesh);
+            }
+
+            isViewerInit = true;
+
+            function resize3DViewer() {
+                if (!isViewerInit || !renderer || !camera) return;
+                const cw = container.clientWidth || 400;
+                const ch = Math.min(container.clientHeight || 300, SKELETON_3D_MAX_HEIGHT);
+                if (cw < 1 || ch < 1) return;
+                camera.aspect = cw / ch;
+                camera.updateProjectionMatrix();
+                renderer.setSize(cw, ch);
+            }
+            window.refresh3DViewerSize = resize3DViewer;
+            if (!viewerResizeBound) {
+                viewerResizeBound = true;
+                window.addEventListener('resize', resize3DViewer, { passive: true });
+                window.addEventListener('orientationchange', () => setTimeout(resize3DViewer, 150), { passive: true });
+            }
+            resize3DViewer();
+
+            function renderLoop() {
+                if (!isViewerInit) return;
+                requestAnimationFrame(renderLoop);
+                if (document.hidden) return;
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            renderLoop();
+        }
+
+        function normalizeSkeleton(kpts) {
+            if (!Array.isArray(kpts) || !kpts.length) {
+                console.warn('normalizeSkeleton: empty keypoints');
+                return [];
+            }
+            const frames = [];
+            for (let f = 0; f < kpts.length; f++) {
+                const src = kpts[f];
+                if (!src || !src.length) continue;
+                const frame = src.map((p) => [
+                    Number(p?.[0]) || 0,
+                    Number(p?.[1]) || 0,
+                    Number(p?.[2]) || 0,
+                ]);
+                while (frame.length < 17) frame.push([0, 0, 0]);
+
+                const pelvis = frame[0];
+                // Center on pelvis (historical viewer convention).
+                frame.forEach((p) => {
+                    p[0] -= pelvis[0];
+                    p[1] -= pelvis[1];
+                    p[2] -= pelvis[2];
+                });
+
+                let totalLen = 0;
+                H36M_EDGES.forEach(([i, j]) => {
+                    const dx = frame[i][0] - frame[j][0];
+                    const dy = frame[i][1] - frame[j][1];
+                    const dz = frame[i][2] - frame[j][2];
+                    totalLen += Math.sqrt(dx * dx + dy * dy + dz * dz);
+                });
+                const avgLen = totalLen / H36M_EDGES.length;
+                if (avgLen > 1e-6) {
+                    frame.forEach((p) => {
+                        p[0] /= avgLen;
+                        p[1] /= avgLen;
+                        p[2] /= avgLen;
+                    });
+                } else {
+                    console.warn('normalizeSkeleton: near-zero bone length on frame', f);
+                }
+                frames.push(frame);
+            }
+            return frames;
+        }
+
+        // Animation speed control
+        function getSpeedMultiplier() {
+            const speed = window.animationSpeed || 1;
+            if (speed <= 5) {
+                return 0.25 + (speed - 1) * 0.1875;
+            } else {
+                return 1.0 + (speed - 5) * 0.2;
+            }
+        }
+
+        function onSpeedSliderChange(value) {
+            window.animationSpeed = parseInt(value);
+            const multiplier = getSpeedMultiplier();
+            const label = document.getElementById('speedLabel');
+            if (label) label.textContent = `${multiplier.toFixed(1)}x`;
+            if (animationTimer && !window.animationPaused) {
+                restartAnimationWithCurrentSpeed();
+            }
+        }
+
+        function restartAnimationWithCurrentSpeed() {
+            if (animationTimer) {
+                clearInterval(animationTimer);
+            }
+            const speedMultiplier = getSpeedMultiplier();
+            const frameInterval = Math.round(1000 / (VIDEO_FPS * speedMultiplier));
+            animationTimer = setInterval(() => {
+                if (!window.animationPaused && !window.manualFrameOverride && skeletonData) {
+                    currentSkeletonFrame = (currentSkeletonFrame + 1) % skeletonData.length;
+                    updateSkeletonFrame();
+                    window.currentFrameIndex = currentSkeletonFrame;
+                    if (window.currentAnalysisData) {
+                        updateFrameAnalysis(window.currentAnalysisData, currentSkeletonFrame);
+                        drawExtensionChart(window.currentAnalysisData);
+                        syncAllFrameSliders(currentSkeletonFrame + 1);
+                    }
+                }
+            }, frameInterval);
+        }
+
+        function syncAllFrameSliders(value) {
+            const frameSlider = document.getElementById('frameSlider');
+            const skeletonSlider = document.getElementById('skeletonFrameSlider');
+            const skeletonLabel = document.getElementById('skeletonFrameLabel');
+            if (frameSlider) frameSlider.value = value;
+            if (skeletonSlider) skeletonSlider.value = value;
+            const n = skeletonData?.length || 30;
+            if (skeletonLabel) skeletonLabel.textContent = `${value} / ${n}`;
+        }
+
+        function onSkeletonFrameSliderChange(value) {
+            onFrameSliderChange(value);
+        }
+
+        function toggleAnimation() {
+            window.animationPaused = !window.animationPaused;
+            window.manualFrameOverride = false;
+            updatePlayPauseButton();
+            if (!window.animationPaused && skeletonData) {
+                restartAnimationWithCurrentSpeed();
+            }
+        }
+
+        function updatePlayPauseButton() {
+            const btn = document.getElementById('playPauseBtn');
+            if (btn) {
+                btn.textContent = window.animationPaused ? 'Play' : 'Pause';
+                btn.classList.toggle('bg-green-600', window.animationPaused);
+                btn.classList.toggle('bg-blue-600', !window.animationPaused);
+            }
+        }
+
+        function load3DSkeleton(touchName) {
+            if (animationTimer) {
+                clearInterval(animationTimer);
+                animationTimer = null;
+            }
+
+            window.animationPaused = false;
+            window.manualFrameOverride = false;
+
+            const data = THREE_D_CACHE?.[touchName];
+            if (!data) {
+                console.warn("No cached 3D data for touch:", touchName, THREE_D_CACHE);
+                return;
+            }
+
+            const scorerKey = touchName.includes('fencer1') ? 'fencer1_3d' : 'fencer2_3d';
+            const scorerAnalysisKey = touchName.includes('fencer1') ? 'fencer1_analysis' : 'fencer2_analysis';
+            const handednessKey = touchName.includes('fencer1') ? 'fencer1_handedness' : 'fencer2_handedness';
+
+            const rawData = data[scorerKey];
+            const analysisData = data[scorerAnalysisKey];
+            const detectedHandedness = data[handednessKey] || 'right';
+
+            if (!rawData || rawData.length === 0) {
+                console.warn('No 3D joints for', scorerKey, data);
+                return;
+            }
+
+            // Init viewer only after we know data exists (avoids origin-only "one dot").
+            init3DViewer();
+
+            console.log('load3DSkeleton', {
+                touchName,
+                scorerKey,
+                frames: rawData.length,
+                joint0: rawData[0]?.[0],
+                hasAnalysis: !!(analysisData && analysisData.per_frame_analysis),
+            });
+
+            skeletonData = normalizeSkeleton(rawData);
+            currentSkeletonFrame = 0;
+
+            window.currentAnalysisData = analysisData || null;
+            window.detectedArm = detectedHandedness;
+            window.selectedHandedness = 'auto';
+
+            const handednessBadge = document.getElementById('detectedHandedness');
+            if (handednessBadge) {
+                handednessBadge.textContent = `Detected: ${detectedHandedness.charAt(0).toUpperCase() + detectedHandedness.slice(1)}-handed`;
+            }
+
+            updatePlayPauseButton();
+            syncAllFrameSliders(1);
+
+            if (analysisData && analysisData.per_frame_analysis) {
+                initAnalysisDisplay(analysisData);
+            } else {
+                console.warn('No per-frame analysis for', scorerAnalysisKey);
+                ['armExtension', 'rightKneeAngle', 'leftKneeAngle', 'domShoulderAngle']
+                    .forEach((id) => {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = 'n/a';
+                    });
+            }
+
+            updateSpatialTouchRowForTouch(touchName);
+            updateSpatialBoutSummary();
+
+            updateSkeletonFrame();
+            const speedMultiplier = getSpeedMultiplier();
+            const frameInterval = Math.round(1000 / (VIDEO_FPS * speedMultiplier));
+            animationTimer = setInterval(() => {
+                if (!window.animationPaused && !window.manualFrameOverride && skeletonData?.length) {
+                    currentSkeletonFrame = (currentSkeletonFrame + 1) % skeletonData.length;
+                    updateSkeletonFrame();
+                    window.currentFrameIndex = currentSkeletonFrame;
+                    if (window.currentAnalysisData) {
+                        updateFrameAnalysis(window.currentAnalysisData, currentSkeletonFrame);
+                        drawExtensionChart(window.currentAnalysisData);
+                        syncAllFrameSliders(currentSkeletonFrame + 1);
+                    }
+                }
+            }, frameInterval);
+        }
+
+        function updateSkeletonFrame() {
+            if (!skeletonData || !isViewerInit) return;
+
+            const frame = skeletonData[currentSkeletonFrame];
+            if (!frame) return;
+
+            const effectiveHandedness =
+                (window.selectedHandedness && window.selectedHandedness !== 'auto')
+                    ? window.selectedHandedness
+                    : (window.detectedArm || 'right');
+            const hideLeftArm = effectiveHandedness === 'right';
+            const hideRightArm = effectiveHandedness === 'left';
+
+            H36M_EDGES.forEach(([i, j], idx) => {
+                const isHeadNeckEdge =
+                    (i === 8 && j === 9) ||
+                    (i === 9 && j === 10);
+                const isLeftArmEdge =
+                    (i === 8 && j === 11) ||
+                    (i === 11 && j === 12) ||
+                    (i === 12 && j === 13);
+                const isRightArmEdge =
+                    (i === 8 && j === 14) ||
+                    (i === 14 && j === 15) ||
+                    (i === 15 && j === 16);
+
+                const shouldHide =
+                    isHeadNeckEdge ||
+                    (hideLeftArm && isLeftArmEdge) ||
+                    (hideRightArm && isRightArmEdge);
+
+                boneLines[idx].visible = !shouldHide;
+
+                if (shouldHide) {
+                    return;
+                }
+
+                const positions = boneLines[idx].geometry.attributes.position.array;
+                // MotionBERT: X=left/right, Y=height (inverted), Z=depth
+                positions[0] = frame[i][0];
+                positions[1] = -frame[i][1];
+                positions[2] = -frame[i][2];
+                positions[3] = frame[j][0];
+                positions[4] = -frame[j][1];
+                positions[5] = -frame[j][2];
+                boneLines[idx].geometry.attributes.position.needsUpdate = true;
+            });
+
+            frame.forEach((p, i) => {
+                const isHeadNeckJoint = HEAD_NECK_JOINTS.includes(i);
+                const isLeftArmJoint = LEFT_ARM_JOINTS.includes(i);
+                const isRightArmJoint = RIGHT_ARM_JOINTS.includes(i);
+                const shouldHideJoint =
+                    isHeadNeckJoint ||
+                    (hideLeftArm && isLeftArmJoint) ||
+                    (hideRightArm && isRightArmJoint);
+
+                jointMeshes[i].visible = !shouldHideJoint;
+                jointMeshes[i].position.set(p[0], -p[1], -p[2]);
+            });
+
+            const n = skeletonData.length;
+            document.getElementById('frameCounter').textContent =
+                `Frame ${currentSkeletonFrame + 1}/${n}`;
+            const skeletonLabel = document.getElementById('skeletonFrameLabel');
+            if (skeletonLabel) skeletonLabel.textContent = `${currentSkeletonFrame + 1} / ${n}`;
+        }
+
+        // ============================================================
+        // Analysis Display Functions
+        // ============================================================
+        function setHandedness(handedness) {
+            window.selectedHandedness = handedness;
+
+            ['handednessAuto', 'handednessLeft', 'handednessRight'].forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    const isSelected = window.selectedHandedness === id.replace('handedness', '').toLowerCase();
+                    btn.classList.toggle('bg-blue-600', isSelected);
+                    btn.classList.toggle('bg-gray-700', !isSelected);
+                }
+            });
+
+            if (window.currentAnalysisData) {
+                updateFrameAnalysis(window.currentAnalysisData, window.currentFrameIndex);
+                populateSequenceStats(window.currentAnalysisData);
+                drawExtensionChart(window.currentAnalysisData);
+            }
+            updateSkeletonFrame();
+        }
+
+        function initAnalysisDisplay(analysisData) {
+            if (!analysisData || !analysisData.per_frame_analysis) return;
+
+            const slider = document.getElementById('frameSlider');
+            if (slider) {
+                slider.min = 1;
+                slider.max = analysisData.per_frame_analysis.length;
+                slider.value = 1;
+            }
+
+            updateFrameAnalysis(analysisData, 0);
+            populateSequenceStats(analysisData);
+            drawExtensionChart(analysisData);
+        }
+
+        function updateFrameAnalysis(analysisData, frameIndex) {
+            if (!analysisData || !analysisData.per_frame_analysis) return;
+            const frame = analysisData.per_frame_analysis[frameIndex];
+            if (!frame) return;
+
+            window.currentFrameIndex = frameIndex;
+
+            const label = document.getElementById('currentFrameLabel');
+            if (label) {
+                label.textContent = `Frame ${frameIndex + 1} Analysis (${(frameIndex/30).toFixed(3)}s)`;
+            }
+
+            const slider = document.getElementById('frameSlider');
+            if (slider) slider.value = frameIndex + 1;
+
+            const ang = frame.angles;
+            if (!ang) return;
+
+            const handedness = window.selectedHandedness === 'auto' ? window.detectedArm : window.selectedHandedness;
+            const armExtKey = handedness === 'left' ? 'left_arm_extension' : 'right_arm_extension';
+            const shoulderKey = handedness === 'left' ? 'left_shoulder_angle' : 'right_shoulder_angle';
+
+            // Arm extension as % of 180
+            const armExt = ang[armExtKey] || ang.right_arm_extension || 0;
+            const armExtPct = (armExt / 180) * 100;
+            const armExtEl = document.getElementById('armExtension');
+            if (armExtEl) armExtEl.textContent = `${armExtPct.toFixed(1)}%`;
+
+            const setAngle = (id, val) => {
+                const el = document.getElementById(id);
+                if (el && val !== undefined) el.textContent = `${val.toFixed(1)}`;
+            };
+
+            setAngle('rightKneeAngle', ang.right_knee_angle);
+            setAngle('leftKneeAngle', ang.left_knee_angle);
+            setAngle('domShoulderAngle', ang[shoulderKey]);
+        }
+
+        function populateSequenceStats(analysisData) {
+            const stats = document.getElementById('sequenceStats');
+            if (!stats || !analysisData || !analysisData.angle_statistics) return;
+
+            const angleStats = analysisData.angle_statistics;
+            const handedness = window.selectedHandedness === 'auto' ? window.detectedArm : window.selectedHandedness;
+            const extKey = handedness === 'left' ? 'left_arm_extension' : 'right_arm_extension';
+            const extStats = angleStats[extKey] || angleStats.right_arm_extension;
+
+            if (!extStats) return;
+
+            // Convert to % of 180
+            const toPct = (deg) => (deg / 180) * 100;
+            const meanPct = toPct(extStats.mean);
+            const stdPct = toPct(extStats.std);
+            const minPct = toPct(extStats.min);
+            const maxPct = toPct(extStats.max);
+
+            stats.innerHTML = `
+                <div class="bg-gray-800 rounded-lg p-3">
+                    <p class="text-xs text-gray-400 mb-1">Avg Dominant Arm Ext.</p>
+                    <p class="text-lg font-bold text-blue-400">${meanPct.toFixed(1)}%</p>
+                    <p class="text-xs text-gray-500">${stdPct.toFixed(1)}%</p>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-3">
+                    <p class="text-xs text-gray-400 mb-1">Max Dominant Arm Ext.</p>
+                    <p class="text-lg font-bold text-green-400">${maxPct.toFixed(1)}%</p>
+                    <p class="text-xs text-gray-500">Min: ${minPct.toFixed(1)}%</p>
+                </div>
+            `;
+        }
+
+        function drawExtensionChart(analysisData) {
+            const canvas = document.getElementById('analysisChart');
+            if (!canvas || !analysisData || !analysisData.per_frame_analysis) return;
+
+            const ctx = canvas.getContext('2d');
+            const width = canvas.offsetWidth || 600;
+            const height = canvas.offsetHeight || 120;
+            canvas.width = width;
+            canvas.height = height;
+
+            const frames = analysisData.per_frame_analysis;
+            const padding = 22;
+            const chartWidth = width - padding * 2;
+            const chartHeight = height - padding * 2;
+
+            ctx.fillStyle = '#1f2937';
+            ctx.fillRect(0, 0, width, height);
+
+            const handedness = window.selectedHandedness === 'auto' ? window.detectedArm : window.selectedHandedness;
+            const extKey = handedness === 'left' ? 'left_arm_extension' : 'right_arm_extension';
+            const extensions = frames.map(f => {
+                const deg = f.angles[extKey] || f.angles.right_arm_extension || 0;
+                return (deg / 180) * 100;
+            });
+            const minVal = Math.min(...extensions) - 5;
+            const maxVal = Math.max(...extensions) + 5;
+            const range = maxVal - minVal;
+
+            ctx.strokeStyle = '#374151';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const y = padding + (chartHeight * i / 4);
+                ctx.beginPath();
+                ctx.moveTo(padding, y);
+                ctx.lineTo(width - padding, y);
+                ctx.stroke();
+
+                const val = maxVal - (range * i / 4);
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '10px Inter';
+                ctx.fillText(val.toFixed(0) + '%', 2, y + 4);
+            }
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            extensions.forEach((val, i) => {
+                const x = padding + (i / (extensions.length - 1)) * chartWidth;
+                const y = padding + ((maxVal - val) / range) * chartHeight;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            const currentX = padding + (window.currentFrameIndex / (extensions.length - 1)) * chartWidth;
+            ctx.beginPath();
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.moveTo(currentX, padding);
+            ctx.lineTo(currentX, height - padding);
+            ctx.stroke();
+        }
+
+        function prevAnalysisFrame() {
+            if (window.currentAnalysisData && window.currentFrameIndex > 0) {
+                window.manualFrameOverride = true;
+                currentSkeletonFrame = window.currentFrameIndex - 1;
+                updateSkeletonFrame();
+                updateFrameAnalysis(window.currentAnalysisData, currentSkeletonFrame);
+                drawExtensionChart(window.currentAnalysisData);
+                syncAllFrameSliders(currentSkeletonFrame + 1);
+            }
+        }
+
+        function nextAnalysisFrame() {
+            if (window.currentAnalysisData && window.currentFrameIndex < 29) {
+                window.manualFrameOverride = true;
+                currentSkeletonFrame = window.currentFrameIndex + 1;
+                updateSkeletonFrame();
+                updateFrameAnalysis(window.currentAnalysisData, currentSkeletonFrame);
+                drawExtensionChart(window.currentAnalysisData);
+                syncAllFrameSliders(currentSkeletonFrame + 1);
+            }
+        }
+
+        function onFrameSliderChange(val) {
+            window.manualFrameOverride = true;
+            const frameIndex = parseInt(val) - 1;
+            currentSkeletonFrame = frameIndex;
+            updateSkeletonFrame();
+            if (window.currentAnalysisData) {
+                updateFrameAnalysis(window.currentAnalysisData, frameIndex);
+                drawExtensionChart(window.currentAnalysisData);
+                syncAllFrameSliders(val);
+            }
+        }
+
+        let chartResizeTimer = null;
+        let layoutResizeTimer = null;
+        LAYOUT_MQ.addEventListener('change', () => {
+            if (allResults.length) {
+                const parsed = allResults.map((r, idx) => {
+                    const frameMatch = r.touch.match(/frame(\d+)/);
+                    const frame = frameMatch ? parseInt(frameMatch[1]) : 0;
+                    const fencer = r.touch.includes('fencer1') ? 'Fencer 1' : 'Fencer 2';
+                    const fencerNum = r.touch.includes('fencer1') ? 1 : 2;
+                    return { ...r, idx, frame, fencer, fencerNum, time: frame / VIDEO_FPS };
+                }).sort((a, b) => a.frame - b.frame);
+                rebuildTouchList(parsed);
+                if (typeof window._selectedTouchIdx === 'number') {
+                    const idx = window._selectedTouchIdx;
+                    document.querySelectorAll('.touch-btn').forEach(btn => {
+                        const selected = btn.dataset.idx == idx;
+                        btn.classList.toggle('bg-gray-600', selected);
+                        if (isMobileLayout()) {
+                            btn.classList.toggle('border-blue-500/50', selected);
+                        }
+                    });
+                }
+            }
+            applyResultsLayout();
+        });
+        window.addEventListener('resize', () => {
+            clearTimeout(layoutResizeTimer);
+            layoutResizeTimer = setTimeout(applyResultsLayout, 100);
+            if (!window.currentAnalysisData) return;
+            clearTimeout(chartResizeTimer);
+            chartResizeTimer = setTimeout(() => drawExtensionChart(window.currentAnalysisData), 150);
+        }, { passive: true });
+
+        // ============================================================
+        // Auto-load from URL parameters
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            applyResultsLayout();
+            initMobileSwipe();
+            const params = new URLSearchParams(window.location.search);
+            const touchParam = params.get('touch');
+            if (touchParam) window._pendingTouchFocusId = touchParam;
+            const shareToken = params.get('share');
+            const jobIdParam = params.get('job_id');
+            const videoUrl = params.get('video');
+            const dataUrl = params.get('data');
+
+            if (shareToken) {
+                const statusEl = document.getElementById('loadStatus');
+                statusEl.classList.remove('hidden');
+                statusEl.textContent = 'Loading shared results…';
+                statusEl.className = 'text-sm text-blue-400';
+                try {
+                    const res = await apiFetch(
+                        `/api/queue/shared-results/${encodeURIComponent(shareToken)}`
+                    );
+                    const body = await res.json();
+                    if (res.ok && body.success && body.results) {
+                        const r = body.results;
+                        processLoadedData(
+                            {
+                                predictions: r.predictions,
+                                three_d_results: r['3d_results'] || r.three_d_results,
+                                fps: r.fps,
+                                video_url: r.video_url,
+                                job_id: r.job_id || body.job_id,
+                                job_type: r.job_type,
+                                highlight_reel_url: r.highlight_reel_url,
+                                deleted_touch_ids: r.deleted_touch_ids || [],
+                                spatial_touch_summary: r.spatial_touch_summary || null,
+                                arm_attempts: r.arm_attempts || null,
+                            },
+                            { readOnly: true }
+                        );
+                        statusEl.textContent = 'Shared results loaded.';
+                        statusEl.className = 'text-sm text-green-400';
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('share load failed', err);
+                }
+                statusEl.textContent =
+                    'This share link is invalid or the analysis is no longer available.';
+                statusEl.className = 'text-sm text-red-400';
+                return;
+            }
+
+            if (jobIdParam) {
+                const statusEl = document.getElementById('loadStatus');
+                statusEl.classList.remove('hidden');
+                statusEl.textContent = 'Loading results...';
+                statusEl.className = 'text-sm text-blue-400';
+                try {
+                    const res = await apiFetch(`/api/queue/results/${encodeURIComponent(jobIdParam)}`);
+                    const body = await res.json();
+                    if (res.ok && body.success && body.results) {
+                        const r = body.results;
+                        processLoadedData({
+                            predictions: r.predictions,
+                            three_d_results: r['3d_results'] || r.three_d_results,
+                            fps: r.fps,
+                            video_url: r.video_url,
+                            job_id: r.job_id || body.job_id || jobIdParam,
+                            job_type: r.job_type,
+                            highlight_reel_url: r.highlight_reel_url,
+                            deleted_touch_ids: r.deleted_touch_ids || [],
+                            spatial_touch_summary: r.spatial_touch_summary || null,
+                            arm_attempts: r.arm_attempts || null,
+                            user_fencer: r.user_fencer || null,
+                            llm_analysis: r.llm_analysis || null,
+                            llm_analysis_stale: !!r.llm_analysis_stale,
+                        });
+                        canonicalizeResultUrlToJobId(r.job_id || body.job_id || jobIdParam);
+                        statusEl.textContent = 'Results loaded.';
+                        statusEl.className = 'text-sm text-green-400';
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('job_id load failed', err);
+                }
+                if (!dataUrl) {
+                    statusEl.textContent =
+                        'Could not load this analysis. Sign in with the account that owns this job, or open the full link from your results email.';
+                    statusEl.className = 'text-sm text-red-400';
+                    return;
+                }
+                statusEl.textContent = 'Loading snapshot from email link...';
+            }
+
+            if (dataUrl) {
+                document.getElementById('loadStatus').classList.remove('hidden');
+                document.getElementById('loadStatus').textContent = 'Loading results...';
+                document.getElementById('loadStatus').className = 'text-sm text-blue-400';
+
+                try {
+                    const response = await fetch(decodeURIComponent(dataUrl));
+                    if (!response.ok) throw new Error('Failed to load results data');
+
+                    const data = await response.json();
+                    const videoDecoded = videoUrl ? decodeURIComponent(videoUrl) : '';
+                    if (videoDecoded) {
+                        data.video_url = videoDecoded;
+                    }
+
+                    // Email snapshot JSON on R2 is frozen at send time. If signed in as the job owner,
+                    // merge latest predictions (including user corrections) from the app database.
+                    let mergedFromApi = false;
+                    const mergeJobId = data.job_id || jobIdParam;
+                    if (mergeJobId) {
+                        try {
+                            const apiRes = await apiFetch(
+                                `/api/queue/results/${encodeURIComponent(mergeJobId)}`
+                            );
+                            if (apiRes.ok) {
+                                const body = await apiRes.json();
+                                if (body.success && body.results) {
+                                    const r = body.results;
+                                    data.predictions = r.predictions;
+                                    data.three_d_results = r['3d_results'] || r.three_d_results;
+                                    data.fps = r.fps;
+                                    data.job_id = r.job_id || body.job_id || mergeJobId;
+                                    data.deleted_touch_ids = r.deleted_touch_ids || [];
+                                    data.spatial_touch_summary = r.spatial_touch_summary || null;
+                                    if (r.arm_attempts != null) data.arm_attempts = r.arm_attempts;
+                                    data.user_fencer = r.user_fencer || null;
+                                    data.llm_analysis = r.llm_analysis || null;
+                                    data.llm_analysis_stale = !!r.llm_analysis_stale;
+                                    mergedFromApi = true;
+                                    if (r.video_url) data.video_url = r.video_url;
+                                    else if (videoDecoded) data.video_url = videoDecoded;
+                                }
+                            }
+                        } catch (mergeErr) {
+                            console.warn('Could not merge server results', mergeErr);
+                        }
+                    }
+
+                    processLoadedData(data);
+                    if (mergedFromApi && data.job_id) {
+                        canonicalizeResultUrlToJobId(data.job_id);
+                    } else if (mergeJobId && data.job_id) {
+                        canonicalizeResultUrlToJobId(data.job_id);
+                    }
+                    document.getElementById('loadStatus').textContent = 'Results loaded successfully!';
+                    document.getElementById('loadStatus').className = 'text-sm text-green-400';
+
+                } catch (err) {
+                    document.getElementById('loadStatus').textContent = 'Error loading results: ' + err.message;
+                    document.getElementById('loadStatus').className = 'text-sm text-red-400';
+                }
+            } else if (videoUrl) {
+                const video = document.getElementById('resultsVideo');
+                video.src = decodeURIComponent(videoUrl);
+                video.load();
+                document.getElementById('videoStatus').textContent = 'Video: ' + decodeURIComponent(videoUrl);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Flask / web layer (pip). Install into the same env as the ML stack.
+flask
+flask-cors
+gunicorn
+flask-sqlalchemy
+authlib
+requests
+markdown2
+pyyaml
+python-dateutil
+boto3
+onnxruntime-gpu==1.16.3

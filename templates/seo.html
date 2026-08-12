@@ -1,0 +1,37 @@
+{# Shared SEO / social meta. Set variables before include, or rely on defaults. #}
+{%- set _site_name = "SmarterFencing.AI" -%}
+{%- set _site_url = "https://smarterfencing.ai" -%}
+{%- set _default_desc = "AI fencing analytics for bout video: touch maps, style archetypes, and practice notes from your footage—not generic advice." -%}
+{%- set _title = seo_title if seo_title is defined else _site_name -%}
+{%- set _desc = seo_description if seo_description is defined else _default_desc -%}
+{%- set _canonical = seo_canonical if seo_canonical is defined else (_site_url ~ request.path) -%}
+{%- set _image = seo_image if seo_image is defined else (_site_url ~ "/static/brand/og-image.jpg") -%}
+{%- set _robots = seo_robots if seo_robots is defined else "index,follow" -%}
+{%- set _og_type = seo_og_type if seo_og_type is defined else "website" -%}
+
+<title>{{ _title }}</title>
+<meta name="description" content="{{ _desc }}">
+<meta name="robots" content="{{ _robots }}">
+<link rel="canonical" href="{{ _canonical }}">
+
+<link rel="icon" href="{{ url_for('static', filename='brand/favicon.svg') }}" type="image/svg+xml">
+<link rel="icon" href="{{ url_for('static', filename='brand/logo.png') }}" type="image/png" sizes="512x512">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='brand/apple-touch-icon.png') }}">
+<meta name="theme-color" content="#07090c">
+
+<meta property="og:type" content="{{ _og_type }}">
+<meta property="og:site_name" content="{{ _site_name }}">
+<meta property="og:title" content="{{ _title }}">
+<meta property="og:description" content="{{ _desc }}">
+<meta property="og:url" content="{{ _canonical }}">
+<meta property="og:image" content="{{ _image }}">
+<meta property="og:image:alt" content="{{ _site_name }} – AI fencing analytics">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ _title }}">
+<meta name="twitter:description" content="{{ _desc }}">
+<meta name="twitter:image" content="{{ _image }}">
+
+{%- if seo_json_ld is defined and seo_json_ld -%}
+<script type="application/ld+json">{{ seo_json_ld | safe }}</script>
+{%- endif -%}

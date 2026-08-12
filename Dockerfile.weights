@@ -1,0 +1,5 @@
+# Custom fencing weights: COCO-17 ViTPose-H + ONNX YOLO11s/RTMPose-s + touch/attack/ODTrack.
+# Build context: weights-context/ (see scripts/prepare-weights-context.sh)
+FROM alpine:3.19
+WORKDIR /weights
+COPY . /weights/

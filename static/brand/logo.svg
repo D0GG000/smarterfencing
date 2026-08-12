@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SmarterFencing.AI">
+  <rect width="512" height="512" rx="96" fill="#05070a"/>
+  <!-- Angular frame -->
+  <path fill="#14b8a6" d="M118 96h196c18 0 28 20 18 34L214 286c-6 9-16 14-27 14H118c-14 0-24-14-18-26l54-148c4-10 13-16 24-16z"/>
+  <path fill="#14b8a6" d="M394 416H198c-18 0-28-20-18-34l118-156c6-9 16-14 27-14h69c14 0 24 14 18 26l-54 148c-4 10-13 16-24 16z"/>
+  <!-- Target -->
+  <circle cx="256" cy="256" r="78" fill="none" stroke="#c8f542" stroke-width="28"/>
+  <circle cx="256" cy="256" r="28" fill="#c8f542"/>
+  <!-- Foil -->
+  <g transform="rotate(-38 256 256)">
+    <rect x="118" y="248" width="248" height="16" rx="4" fill="#2dd4bf"/>
+    <circle cx="150" cy="256" r="22" fill="none" stroke="#2dd4bf" stroke-width="10"/>
+    <rect x="96" y="246" width="36" height="20" rx="6" fill="#14b8a6"/>
+    <polygon points="372,256 348,244 348,268" fill="#eef1f5"/>
+  </g>
+</svg>

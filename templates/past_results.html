@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    {% set seo_title = "Your past results – SmarterFencing" %}
+    {% set seo_robots = "noindex,nofollow" %}
+    {% include 'seo.html' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+    <style>
+        .past-wrap { max-width: 900px; margin: 0 auto; padding: 16px 16px 40px; }
+        @media (min-width: 640px) {
+            .past-wrap { padding: 24px 18px 48px; }
+        }
+        .past-wrap h1 {
+            font-family: var(--font-display);
+            font-size: clamp(1.45rem, 4vw, 1.9rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin-bottom: 8px;
+            line-height: 1.25;
+            overflow: visible;
+            padding-bottom: 0.06em;
+        }
+        .past-wrap .lead { color: var(--muted); margin-bottom: 24px; font-size: 0.95rem; }
+        .past-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 24px; }
+        .past-actions a.btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 0.9rem;
+            background: linear-gradient(135deg, var(--accent), #a8e635);
+            color: var(--accent-ink); text-decoration: none;
+            box-shadow: 0 8px 22px rgba(200, 245, 66, 0.25);
+        }
+        .past-actions a.btn:hover { filter: brightness(1.05); }
+        .past-actions a.link-muted { color: var(--muted); font-size: 0.9rem; text-decoration: underline; }
+        .job-list { display: flex; flex-direction: column; gap: 12px; }
+        .job-card {
+            background: linear-gradient(165deg, rgba(24, 30, 40, 0.95), rgba(14, 18, 26, 0.98));
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+            display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px;
+            box-shadow: var(--shadow);
+            transition: border-color 0.2s ease, transform 0.2s ease;
+        }
+        .job-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+        .job-card .meta { flex: 1; min-width: 200px; }
+        .job-card .name { font-weight: 650; margin-bottom: 4px; word-break: break-word; }
+        .job-card .sub { font-size: 0.85rem; color: var(--muted); }
+        .job-card .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .badge {
+            display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+            text-transform: capitalize;
+        }
+        .badge-complete { background: rgba(52, 211, 153, 0.16); color: var(--ok); }
+        .badge-processing { background: rgba(20, 184, 166, 0.18); color: var(--brand-2); }
+        .badge-queued { background: rgba(139, 150, 168, 0.15); color: var(--muted); }
+        .badge-error { background: rgba(248, 113, 113, 0.18); color: #f87171; }
+        .badge-other { background: rgba(255, 255, 255, 0.06); color: var(--muted); }
+        .btn-small {
+            padding: 10px 14px; border-radius: 10px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+            border: 1px solid var(--border); background: rgba(255, 255, 255, 0.04); color: var(--ink);
+            text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+            min-height: 44px;
+        }
+        .btn-small.primary {
+            background: linear-gradient(135deg, var(--brand), var(--brand-deep));
+            color: #042f2e; border: none;
+        }
+        .btn-small:hover { filter: brightness(1.06); }
+        .empty-state, .auth-prompt {
+            text-align: center; padding: 40px 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: var(--radius); border: 1px dashed var(--border);
+            color: var(--muted);
+        }
+        .auth-prompt a { color: var(--brand-2); font-weight: 600; }
+        .err-msg { color: #f87171; font-size: 0.9rem; margin-top: 8px; }
+        .loading { color: var(--muted); padding: 24px; text-align: center; }
+        .past-sentinel {
+            height: 1px;
+            width: 100%;
+            margin: 8px 0;
+        }
+        .past-more-status {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.85rem;
+            padding: 12px 8px 4px;
+            min-height: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    {% include 'header.html' %}
+
+    <main class="past-wrap">
+        <h1>Your video analyses</h1>
+        <p class="lead">Open a completed analysis to review touches, charts, and corrections. Processing jobs are listed here too.</p>
+
+        <div class="past-actions">
+            <a href="{{ url_for('demo.demo') }}" class="btn">New analysis</a>
+            <a href="{{ url_for('demo.demo') }}" class="link-muted">Back to analyzer</a>
+        </div>
+
+        <div id="past-root">
+            <p class="loading" id="past-loading">Loading your analyses…</p>
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='header.js') }}"></script>
+    <script>
+        const PAGE_SIZE = 10;
+        let nextOffset = 0;
+        let hasMore = true;
+        let loadingPage = false;
+        let shareWired = false;
+        let scrollObserver = null;
+
+        function apiFetch(url, opts = {}) {
+            return fetch(url, { ...opts, credentials: 'same-origin' });
+        }
+
+        function formatWhen(iso) {
+            if (!iso) return '—';
+            try {
+                const d = new Date(iso);
+                return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+            } catch (e) { return iso; }
+        }
+
+        function displayName(job) {
+            if (job.filename) return job.filename;
+            if (job.r2_object_key) {
+                const parts = job.r2_object_key.split('/');
+                return parts[parts.length - 1] || job.job_id;
+            }
+            return job.job_id;
+        }
+
+        function statusBadge(job) {
+            const s = (job.status || '').toLowerCase();
+            if (s === 'complete') return { cls: 'badge-complete', label: 'Complete' };
+            if (s === 'processing') return { cls: 'badge-processing', label: 'Processing' };
+            if (s === 'queued') return { cls: 'badge-queued', label: 'Queued' };
+            if (s === 'error') return { cls: 'badge-error', label: 'Error' };
+            return { cls: 'badge-other', label: s || 'Unknown' };
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function jobCardHtml(job) {
+            const b = statusBadge(job);
+            const touches = job.touch_count != null ? `${job.touch_count} touch${job.touch_count === 1 ? '' : 'es'}` : '';
+            const when = formatWhen(job.completed_at || job.created_at);
+            let buttons = '';
+            if (job.status === 'complete') {
+                buttons = `<a class="btn-small primary" href="/result?job_id=${encodeURIComponent(job.job_id)}">View results</a>` +
+                    `<button type="button" class="btn-small copy-share-btn" data-job-id="${escapeHtml(job.job_id)}">Copy view-only link</button>`;
+            } else if (job.status === 'queued' || job.status === 'processing') {
+                buttons = `<a class="btn-small" href="/demo?job_id=${encodeURIComponent(job.job_id)}">Open analyzer</a>`;
+            } else {
+                buttons = `<a class="btn-small" href="/demo">Analyzer</a>`;
+            }
+            const err = job.status === 'error' && job.error_message
+                ? `<div class="err-msg">${escapeHtml(job.error_message.slice(0, 200))}${job.error_message.length > 200 ? '…' : ''}</div>`
+                : '';
+            return `
+                <article class="job-card">
+                    <div class="meta">
+                        <div class="name">${escapeHtml(displayName(job))}</div>
+                        <div class="sub">${when}${touches ? ' · ' + touches : ''}</div>
+                        <div style="margin-top:8px"><span class="badge ${b.cls}">${b.label}</span></div>
+                        ${err}
+                    </div>
+                    <div class="actions">${buttons}</div>
+                </article>`;
+        }
+
+        function ensureListShell() {
+            const root = document.getElementById('past-root');
+            let list = root.querySelector('.job-list');
+            if (!list) {
+                root.innerHTML =
+                    '<div class="job-list"></div>' +
+                    '<div class="past-sentinel" id="past-sentinel" aria-hidden="true"></div>' +
+                    '<p class="past-more-status" id="past-more-status"></p>';
+                list = root.querySelector('.job-list');
+                wireShareClicks();
+                watchScroll();
+            }
+            return list;
+        }
+
+        function appendJobs(jobs) {
+            const list = ensureListShell();
+            list.insertAdjacentHTML('beforeend', jobs.map(jobCardHtml).join(''));
+        }
+
+        function setMoreStatus(text) {
+            const el = document.getElementById('past-more-status');
+            if (el) el.textContent = text || '';
+        }
+
+        function watchScroll() {
+            if (scrollObserver) scrollObserver.disconnect();
+            const sentinel = document.getElementById('past-sentinel');
+            if (!sentinel || !('IntersectionObserver' in window)) return;
+            scrollObserver = new IntersectionObserver((entries) => {
+                if (!entries.some((e) => e.isIntersecting)) return;
+                if (hasMore && !loadingPage) loadMore();
+            }, { root: null, rootMargin: '240px 0px', threshold: 0 });
+            scrollObserver.observe(sentinel);
+        }
+
+        function wireShareClicks() {
+            if (shareWired) return;
+            shareWired = true;
+            document.getElementById('past-root').addEventListener('click', (ev) => {
+                const btn = ev.target.closest('.copy-share-btn');
+                if (!btn) return;
+                const jid = btn.getAttribute('data-job-id');
+                if (jid) copyJobShareLink(jid);
+            });
+        }
+
+        async function copyJobShareLink(jobId) {
+            if (!jobId) return;
+            try {
+                const res = await apiFetch(`/api/queue/jobs/${encodeURIComponent(jobId)}/share`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Could not create link');
+                const copied = await window.copyTextToClipboard(data.share_url);
+                if (copied) {
+                    alert(
+                        'View-only link copied. Recipients can see the full analysis but cannot edit results.'
+                    );
+                } else {
+                    window.prompt('Copy this view-only link:', data.share_url);
+                }
+            } catch (e) {
+                alert(e.message || String(e));
+            }
+        }
+
+        async function loadMore() {
+            if (loadingPage || !hasMore) return;
+            loadingPage = true;
+            const root = document.getElementById('past-root');
+            const firstPage = nextOffset === 0;
+            if (!firstPage) setMoreStatus('Loading more…');
+            try {
+                const res = await apiFetch(
+                    `/api/queue/my-jobs?limit=${PAGE_SIZE}&offset=${nextOffset}`
+                );
+                if (res.status === 401) {
+                    root.innerHTML = `
+                        <div class="auth-prompt">
+                            <p>Sign in to see your past analyses.</p>
+                            <p style="margin-top:12px"><a href="{{ url_for('demo.demo') }}">Open the analyzer</a> and use Google or email to log in.</p>
+                        </div>`;
+                    hasMore = false;
+                    return;
+                }
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Could not load analyses');
+                const jobs = data.jobs || [];
+                hasMore = !!data.has_more;
+                nextOffset = data.next_offset != null ? data.next_offset : nextOffset + jobs.length;
+
+                if (firstPage && !jobs.length) {
+                    root.innerHTML = `
+                        <div class="empty-state">
+                            <p>No analyses yet. Upload a fencing video from the analyzer to get started.</p>
+                            <p style="margin-top:16px"><a href="{{ url_for('demo.demo') }}" class="btn-small primary">Go to analyzer</a></p>
+                        </div>`;
+                    hasMore = false;
+                    return;
+                }
+
+                document.getElementById('past-loading')?.remove();
+                appendJobs(jobs);
+                setMoreStatus(hasMore ? 'Scroll for more' : (nextOffset > PAGE_SIZE ? 'End of list' : ''));
+            } catch (e) {
+                if (nextOffset === 0) {
+                    root.innerHTML = `<p class="err-msg">${escapeHtml(e.message || String(e))}</p>`;
+                } else {
+                    setMoreStatus(e.message || 'Could not load more');
+                }
+            } finally {
+                loadingPage = false;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMore();
+            // Fallback if IntersectionObserver is missing: load more near bottom via scroll.
+            if (!('IntersectionObserver' in window)) {
+                window.addEventListener('scroll', () => {
+                    if (!hasMore || loadingPage) return;
+                    const nearBottom =
+                        window.innerHeight + window.scrollY >= document.body.offsetHeight - 320;
+                    if (nearBottom) loadMore();
+                }, { passive: true });
+            }
+        });
+    </script>
+</body>
+</html>

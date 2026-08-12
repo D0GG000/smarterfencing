@@ -1,0 +1,59 @@
+<header>
+  <div class="nav-wrap">
+    <a class="brand" href="/">
+      <img class="brand-logo" src="{{ url_for('static', filename='brand/logo.svg') }}" width="36" height="36" alt="" decoding="async">
+      <span class="brand-text">SmarterFencing.AI</span>
+    </a>
+    <div class="spacer"></div>
+    <div class="header-actions">
+      <span id="headerAuthSlot" class="header-auth-slot" aria-label="Account"></span>
+      <button type="button" class="nav-toggle" aria-label="Open menu" aria-controls="drawer" aria-expanded="false">
+        <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="header-spacer" aria-hidden="true"></div>
+
+<aside id="drawer" class="drawer" aria-hidden="true">
+  <header>
+    <div class="drawer-title">Menu</div>
+    <button type="button" class="drawer-close" data-close aria-label="Close menu">✕</button>
+  </header>
+  <div id="drawerAuthSlot" class="drawer-auth" aria-live="polite"></div>
+  <nav>
+    <a href="/" data-close>Home</a>
+    <a href="/demo" data-close>Analyze my fencing</a>
+    <a href="{{ url_for('demo.past_results') }}" class="drawer-sub" data-close>Past results</a>
+    <a href="{{ url_for('demo.archetypes_page') }}" data-close>Fencing archetypes</a>
+    <hr style="border:0;border-top:1px solid rgba(255,255,255,0.12);margin:0.5rem 0;">
+    <div class="drawer-section-label" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.45);padding:0.25rem 0;">Clipper</div>
+    <a href="{{ url_for('demo.clipper') }}" data-close>Clip &amp; share touches</a>
+    <hr style="border:0;border-top:1px solid rgba(255,255,255,0.12);margin:0.5rem 0;">
+    <div class="drawer-section-label" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.45);padding:0.25rem 0;">Community</div>
+    <a href="{{ url_for('community.community_page') }}" data-close>Community hub</a>
+    <hr style="border:0;border-top:1px solid rgba(255,255,255,0.12);margin:0.5rem 0;">
+    <a href="{{ url_for('fencer.fencer_lookup_page') }}" data-close>Opponent stats</a>
+    <a href="{{ url_for('touch_share.inbox_page') }}" id="navMessagesLink" class="nav-messages-link" data-close>
+      <span class="nav-messages-icon-wrap" aria-hidden="true">
+        <svg class="nav-messages-envelope" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path class="nav-messages-envelope-body" d="M3.5 7.2A2 2 0 0 1 5.4 6h13.2a2 2 0 0 1 1.9 1.2l-8.5 5.3-8.5-5.3Z" fill="currentColor" fill-opacity="0.12"/>
+          <path d="M5.4 6h13.2a2 2 0 0 1 1.9 1.2v10.6a2 2 0 0 1-1.9 1.8H5.4a2 2 0 0 1-1.9-1.8V7.2A2 2 0 0 1 5.4 6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="m4.5 7.5 7.5 4.7 7.5-4.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span class="nav-messages-label">Messages</span>
+      <span id="navMessagesUnread" class="nav-messages-count" hidden aria-hidden="true"></span>
+    </a>
+    <a href="{{ url_for('touch_share.profile_page') }}" data-close>Profile &amp; username</a>
+    <a href="/blog" data-close>Blog</a>
+    <a href="https://www.instagram.com/smarterfencing.ai/" data-close target="_blank" rel="noopener noreferrer">Instagram</a>
+    <a href="mailto:smarterfencing.ai@gmail.com" data-close>Contact us</a>
+  </nav>
+</aside>
+
+<div id="scrim" class="scrim" hidden></div>
+
+<script src="{{ url_for('static', filename='auth-nav.js') }}" defer></script>
+

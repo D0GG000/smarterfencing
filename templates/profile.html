@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    {% set seo_title = "Profile – SmarterFencing" %}
+    {% set seo_robots = "noindex,nofollow" %}
+    {% include 'seo.html' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+    <style>
+        .profile-wrap { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
+        .profile-wrap h1 {
+            font-family: var(--font-display);
+            font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px;
+        }
+        .profile-wrap .lead { color: var(--muted); margin-bottom: 24px; font-size: 0.95rem; }
+        .field { margin-bottom: 18px; }
+        .field label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+        .field input {
+            width: 100%; padding: 11px 13px; border-radius: 12px;
+            border: 1px solid var(--border); background: rgba(0,0,0,0.28); color: var(--ink);
+            font-family: var(--font-body);
+        }
+        .field input:focus { outline: none; border-color: var(--border-strong); box-shadow: 0 0 0 3px var(--ring); }
+        .field .hint { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+        .btn-save {
+            padding: 11px 20px; border-radius: 12px; font-weight: 700; cursor: pointer;
+            background: linear-gradient(135deg, var(--accent), #a8e635); color: var(--accent-ink); border: none;
+        }
+        .status { font-size: 0.85rem; margin-top: 12px; min-height: 1.25rem; }
+        .status.ok { color: var(--ok); }
+        .status.err { color: #f87171; }
+    </style>
+</head>
+<body>
+    {% include 'header.html' %}
+
+    <main class="profile-wrap">
+        <h1>Your profile</h1>
+        <p class="lead">Set a username to share touches with coaches and teammates. Your email is never shown to others.</p>
+
+        <form id="profileForm">
+            <div class="field">
+                <label for="displayName">Display name</label>
+                <input type="text" id="displayName" maxlength="255" placeholder="Jordan Smith" autocomplete="name">
+                <p class="hint">How your name appears in messages.</p>
+            </div>
+            <div class="field">
+                <label for="username">Username</label>
+                <input type="text" id="username" maxlength="32" placeholder="jordan_foil" autocomplete="username" pattern="[a-z][a-z0-9_]{2,31}">
+                <p class="hint">3–32 characters, lowercase letters, numbers, underscore. Required to send touch shares. Cannot be changed once set.</p>
+            </div>
+            <button type="submit" class="btn-save">Save profile</button>
+            <p id="profileStatus" class="status"></p>
+        </form>
+
+        <p style="margin-top: 28px;"><a href="{{ url_for('touch_share.inbox_page') }}" style="color: var(--brand-2);">← Back to messages</a></p>
+    </main>
+
+    <script src="{{ url_for('static', filename='header.js') }}"></script>
+    <script>
+        function apiFetch(url, opts = {}) {
+            return fetch(url, { ...opts, credentials: 'same-origin' });
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const status = document.getElementById('profileStatus');
+            const usernameInput = document.getElementById('username');
+            try {
+                const res = await apiFetch('/api/auth/me');
+                const data = await res.json();
+                if (!data.logged_in) {
+                    window.location.href = '/demo#sign-in';
+                    return;
+                }
+                const u = data.user || {};
+                document.getElementById('displayName').value = u.display_name || '';
+                usernameInput.value = u.username || '';
+                if (u.username) {
+                    usernameInput.readOnly = true;
+                    usernameInput.title = 'Username cannot be changed';
+                }
+            } catch (e) {
+                status.textContent = 'Could not load profile';
+                status.className = 'status err';
+            }
+
+            document.getElementById('profileForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                status.textContent = 'Saving…';
+                status.className = 'status';
+                try {
+                    const payload = {
+                        display_name: document.getElementById('displayName').value,
+                    };
+                    if (!usernameInput.readOnly) {
+                        payload.username = usernameInput.value;
+                    }
+                    const res = await apiFetch('/api/auth/profile', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.error || 'Save failed');
+                    status.textContent = 'Saved.';
+                    status.className = 'status ok';
+                    if (data.user && data.user.username) {
+                        usernameInput.value = data.user.username;
+                        usernameInput.readOnly = true;
+                    }
+                } catch (err) {
+                    status.textContent = err.message || String(err);
+                    status.className = 'status err';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    {% set seo_title = "Opponent stats – SmarterFencing" %}
+    {% set seo_robots = "noindex,nofollow" %}
+    {% include 'seo.html' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+    <style>
+        .fencer-wrap { max-width: 900px; margin: 0 auto; padding: 16px 16px 48px; }
+        @media (min-width: 640px) { .fencer-wrap { padding: 24px 18px 56px; } }
+        .fencer-wrap h1 {
+            font-family: var(--font-display);
+            font-size: clamp(1.45rem, 4vw, 1.9rem);
+            font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px;
+        }
+        .fencer-wrap .lead { color: var(--muted); margin-bottom: 24px; font-size: 0.95rem; line-height: 1.5; }
+        .panel {
+            background: linear-gradient(165deg, rgba(24, 30, 40, 0.95), rgba(14, 18, 26, 0.98));
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+        }
+        .panel h2 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; margin: 0 0 12px; }
+        .field-label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+        .field-input {
+            width: 100%; padding: 12px 14px; border-radius: 12px; font-size: 0.95rem;
+            background: rgba(0, 0, 0, 0.28); border: 1px solid var(--border);
+            color: var(--ink); font-family: var(--font-body);
+        }
+        .field-input:focus { outline: none; border-color: var(--border-strong); box-shadow: 0 0 0 3px var(--ring); }
+        .hint { font-size: 0.82rem; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; align-items: center; }
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 10px 18px; border-radius: 12px; font-weight: 650; font-size: 0.9rem;
+            border: none; cursor: pointer; text-decoration: none;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #a8e635);
+            color: var(--accent-ink);
+            box-shadow: 0 8px 22px rgba(200, 245, 66, 0.25);
+        }
+        .btn-primary:hover { filter: brightness(1.06); }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--ink);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        .btn-secondary:hover { filter: brightness(1.08); }
+        .btn-external {
+            background: transparent;
+            color: var(--brand-2);
+            border: 1px solid rgba(97, 182, 255, 0.35);
+        }
+        .preview-card {
+            margin-top: 18px; padding: 16px 18px;
+            border-radius: 12px; border: 1px dashed rgba(97, 182, 255, 0.35);
+            background: rgba(47, 122, 229, 0.08);
+        }
+        .preview-card .name { font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; }
+        .preview-card .meta { font-size: 0.85rem; color: var(--muted); margin-bottom: 12px; }
+        .attribution {
+            font-size: 0.82rem; color: var(--muted); margin-top: 12px; padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .attribution a { color: var(--brand-2); text-decoration: underline; }
+        .err-msg { color: #f87171; font-size: 0.9rem; margin-top: 10px; min-height: 1.25rem; }
+        .opponent-list { display: flex; flex-direction: column; gap: 12px; }
+        .opponent-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between;
+        }
+        .opponent-card .meta { flex: 1; min-width: 200px; }
+        .opponent-card .title { font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+        .opponent-card .sub { font-size: 0.82rem; color: var(--muted); }
+        .note-field { width: 100%; margin-top: 10px; font-size: 0.88rem; padding: 8px 10px; border-radius: 8px;
+            background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: var(--ink); }
+        .card-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .btn-small {
+            padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.06); color: var(--ink);
+            text-decoration: none; display: inline-flex; align-items: center; min-height: 38px;
+        }
+        .btn-small.danger { color: #f87171; border-color: rgba(248, 113, 113, 0.35); }
+        .empty-state, .auth-prompt {
+            text-align: center; padding: 32px 18px; color: var(--muted);
+            border-radius: var(--radius); border: 1px dashed rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .auth-prompt a { color: var(--brand-2); font-weight: 600; }
+        #my-opponents { scroll-margin-top: calc(var(--header-h, 72px) + 16px); }
+        .name-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 520px) { .name-row { grid-template-columns: 1fr; } }
+        .result-list { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+        .result-item {
+            display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 12px 14px; border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .result-item .name { font-weight: 600; }
+        .result-item .club { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+        .opponent-card.schedule-today {
+            border-color: rgba(74, 222, 128, 0.55);
+            background: rgba(34, 197, 94, 0.1);
+            box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.16), var(--shadow);
+        }
+        .opponent-card.schedule-upcoming {
+            border-color: rgba(251, 146, 60, 0.55);
+            background: rgba(249, 115, 22, 0.1);
+            box-shadow: 0 0 0 1px rgba(251, 146, 60, 0.16), var(--shadow);
+        }
+        .schedule-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+        .schedule-badge.today {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid rgba(74, 222, 128, 0.5);
+            color: #86efac;
+        }
+        .schedule-badge.upcoming {
+            background: rgba(249, 115, 22, 0.18);
+            border: 1px solid rgba(251, 146, 60, 0.5);
+            color: #fdba74;
+        }
+        .schedule-detail {
+            margin: 0 0 8px;
+            font-size: 0.84rem;
+            color: var(--ink);
+            line-height: 1.45;
+        }
+    </style>
+</head>
+<body>
+    {% include 'header.html' %}
+
+    <main class="fencer-wrap">
+        <h1>Opponent stats</h1>
+        <p class="lead">
+            Enter a fencer’s first and last name to find their
+            <a href="https://fencingtracker.com/" target="_blank" rel="noopener noreferrer">FencingTracker</a>
+            profile. Stats open on FencingTracker — we only store your bookmarks here.
+        </p>
+
+        <section class="panel" aria-labelledby="lookup-heading">
+            <h2 id="lookup-heading">Look up a fencer</h2>
+            <div class="name-row">
+                <div>
+                    <label class="field-label" for="first-name">First name</label>
+                    <input id="first-name" class="field-input" type="text" placeholder="Alex" autocomplete="given-name" />
+                </div>
+                <div>
+                    <label class="field-label" for="last-name">Last name</label>
+                    <input id="last-name" class="field-input" type="text" placeholder="Smith" autocomplete="family-name" />
+                </div>
+            </div>
+            <p class="hint">
+                Search uses FencingTracker’s public fencer index (same as their site). Pick the correct person if several match.
+            </p>
+            <div class="actions">
+                <button type="button" class="btn btn-primary" id="btn-search">Search</button>
+                <a class="btn btn-secondary" href="https://fencingtracker.com/" target="_blank" rel="noopener noreferrer">Open FencingTracker</a>
+            </div>
+            <p class="err-msg" id="lookup-err" role="alert"></p>
+            <div id="results-root" hidden></div>
+            <div id="preview-root" hidden></div>
+        </section>
+
+        <section class="panel" id="my-opponents" aria-labelledby="opponents-heading">
+            <h2 id="opponents-heading">My opponents</h2>
+            <p class="hint" style="margin-top:0;margin-bottom:16px">
+                Sign in to save fencers you want to track. Green = event today, orange = registered event in the next 7 days (from FencingTracker).
+            </p>
+            <div id="opponents-root">
+                <p class="hint" id="opponents-loading">Loading…</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='header.js') }}"></script>
+    <script>
+        const FT_HOME = 'https://fencingtracker.com/';
+        let _loggedIn = false;
+        let _currentFencer = null;
+
+        function apiFetch(url, opts = {}) {
+            return fetch(url, { ...opts, credentials: 'same-origin' });
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+
+        function renderPreview(fencer) {
+            _currentFencer = fencer;
+            document.getElementById('results-root').hidden = true;
+            const root = document.getElementById('preview-root');
+            const trackBtn = _loggedIn
+                ? `<button type="button" class="btn btn-primary" id="btn-track">Track opponent</button>`
+                : `<span class="hint">Sign in to save this fencer to My opponents.</span>`;
+            const clubLine = fencer.club
+                ? `<div class="meta">${escapeHtml(fencer.club)}</div>`
+                : '';
+            root.innerHTML = `
+                <div class="preview-card">
+                    <div class="name">${escapeHtml(fencer.display_name)}</div>
+                    ${clubLine}
+                    <div class="meta">Fencer ID ${escapeHtml(fencer.fencer_id)}</div>
+                    <div class="actions">
+                        <a class="btn btn-external" href="${escapeHtml(fencer.profile_url)}" target="_blank" rel="noopener noreferrer">
+                            View stats on FencingTracker ↗
+                        </a>
+                        ${trackBtn}
+                        <button type="button" class="btn btn-secondary" id="btn-back-results">Back to results</button>
+                    </div>
+                    <p class="attribution">
+                        Tournament stats and ratings are provided by
+                        <a href="${FT_HOME}" target="_blank" rel="noopener noreferrer">FencingTracker</a>.
+                        SmarterFencing does not host this data.
+                    </p>
+                </div>`;
+            root.hidden = false;
+            document.getElementById('btn-track')?.addEventListener('click', trackCurrent);
+            document.getElementById('btn-back-results')?.addEventListener('click', () => {
+                root.hidden = true;
+                _currentFencer = null;
+                const resultsRoot = document.getElementById('results-root');
+                if (resultsRoot.innerHTML) resultsRoot.hidden = false;
+            });
+        }
+
+        function renderResults(fencers) {
+            const root = document.getElementById('results-root');
+            document.getElementById('preview-root').hidden = true;
+            _currentFencer = null;
+
+            if (!fencers.length) {
+                root.innerHTML = `
+                    <div class="empty-state" style="margin-top:18px">
+                        <p>No fencers found. Check spelling or try a different name.</p>
+                    </div>`;
+                root.hidden = false;
+                return;
+            }
+
+            root.innerHTML = `
+                <p class="hint" style="margin-top:18px;margin-bottom:10px">
+                    ${fencers.length === 1 ? '1 match' : fencers.length + ' matches'} — select the correct fencer:
+                </p>
+                <div class="result-list">${fencers.map((f, i) => `
+                    <div class="result-item">
+                        <div>
+                            <div class="name">${escapeHtml(f.display_name)}</div>
+                            ${f.club ? `<div class="club">${escapeHtml(f.club)}</div>` : ''}
+                        </div>
+                        <button type="button" class="btn btn-secondary select-fencer-btn" data-index="${i}">Select</button>
+                    </div>
+                `).join('')}</div>`;
+            root.hidden = false;
+            root.querySelectorAll('.select-fencer-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.getAttribute('data-index'), 10);
+                    if (!Number.isNaN(idx) && fencers[idx]) renderPreview(fencers[idx]);
+                });
+            });
+        }
+
+        async function searchByName() {
+            const err = document.getElementById('lookup-err');
+            err.textContent = '';
+            err.style.color = '';
+            const first = document.getElementById('first-name')?.value?.trim();
+            const last = document.getElementById('last-name')?.value?.trim();
+            if (!first || !last) {
+                err.textContent = 'Enter both first and last name.';
+                return;
+            }
+            const btn = document.getElementById('btn-search');
+            if (btn) { btn.disabled = true; btn.textContent = 'Searching…'; }
+            try {
+                const res = await apiFetch('/api/fencers/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ first_name: first, last_name: last }),
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Search failed');
+                _lastSearchResults = data.fencers || [];
+                renderResults(_lastSearchResults);
+            } catch (e) {
+                document.getElementById('results-root').hidden = true;
+                document.getElementById('preview-root').hidden = true;
+                _currentFencer = null;
+                err.textContent = e.message || String(e);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Search'; }
+            }
+        }
+
+        let _lastSearchResults = [];
+
+        async function trackCurrent() {
+            if (!_currentFencer || !_loggedIn) return;
+            const err = document.getElementById('lookup-err');
+            err.textContent = '';
+            try {
+                const res = await apiFetch('/api/fencers/tracked', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fencer_id: _currentFencer.fencer_id,
+                        slug: _currentFencer.slug,
+                        display_name: _currentFencer.display_name,
+                    }),
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Could not save');
+                await loadOpponents();
+                err.textContent = '';
+                err.style.color = 'var(--ok)';
+                err.textContent = data.updated ? 'Already tracked — list updated.' : 'Added to My opponents.';
+                setTimeout(() => { err.textContent = ''; err.style.color = ''; }, 3000);
+            } catch (e) {
+                err.style.color = '';
+                err.textContent = e.message || String(e);
+            }
+        }
+
+        function scheduleCardClass(status) {
+            if (status === 'today') return ' schedule-today';
+            if (status === 'upcoming') return ' schedule-upcoming';
+            return '';
+        }
+
+        function renderScheduleBadge(opponent) {
+            const status = opponent.schedule_status;
+            if (status === 'today') {
+                return '<div class="schedule-badge today">Event today</div>';
+            }
+            if (status === 'upcoming') {
+                return '<div class="schedule-badge upcoming">Event this week</div>';
+            }
+            return '';
+        }
+
+        function renderOpponents(list) {
+            const root = document.getElementById('opponents-root');
+            if (!_loggedIn) {
+                root.innerHTML = `
+                    <div class="auth-prompt">
+                        <p>Sign in to keep a list of opponents you’re tracking.</p>
+                        <p style="margin-top:12px">
+                            <a href="{{ url_for('demo.demo') }}#sign-in">Sign in on the analyzer</a>
+                            or use Google from the menu.
+                        </p>
+                    </div>`;
+                return;
+            }
+            if (!list.length) {
+                root.innerHTML = `
+                    <div class="empty-state">
+                        <p>No tracked opponents yet. Search for a fencer above and click “Track opponent”.</p>
+                    </div>`;
+                return;
+            }
+            root.innerHTML = '<div class="opponent-list">' + list.map(o => `
+                <article class="opponent-card${scheduleCardClass(o.schedule_status)}" data-id="${o.id}">
+                    <div class="meta">
+                        ${renderScheduleBadge(o)}
+                        <div class="title">${escapeHtml(o.display_name)}</div>
+                        ${o.schedule_summary ? `<p class="schedule-detail">${escapeHtml(o.schedule_summary)}</p>` : ''}
+                        <div class="sub">ID ${escapeHtml(o.fencer_id)} · saved ${escapeHtml(formatWhen(o.created_at))}</div>
+                        <input class="note-field" type="text" placeholder="Note (pool, event, etc.)"
+                            value="${escapeHtml(o.user_note)}" data-note-for="${o.id}" maxlength="500" />
+                    </div>
+                    <div class="card-actions">
+                        <a class="btn-small primary" href="${escapeHtml(o.profile_url)}" target="_blank" rel="noopener noreferrer">FencingTracker ↗</a>
+                        <button type="button" class="btn-small save-note-btn" data-id="${o.id}">Save note</button>
+                        <button type="button" class="btn-small danger remove-btn" data-id="${o.id}">Remove</button>
+                    </div>
+                </article>
+            `).join('') + '</div>';
+        }
+
+        function formatWhen(iso) {
+            if (!iso) return '—';
+            try {
+                return new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
+            } catch (e) { return iso; }
+        }
+
+        async function loadOpponents() {
+            const root = document.getElementById('opponents-root');
+            try {
+                const me = await apiFetch('/api/auth/me');
+                const meData = await me.json();
+                _loggedIn = !!(meData.logged_in && meData.user);
+
+                if (!_loggedIn) {
+                    document.getElementById('opponents-loading')?.remove();
+                    renderOpponents([]);
+                    return;
+                }
+
+                const res = await apiFetch('/api/fencers/tracked');
+                if (res.status === 401) {
+                    _loggedIn = false;
+                    renderOpponents([]);
+                    return;
+                }
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Could not load opponents');
+                document.getElementById('opponents-loading')?.remove();
+                renderOpponents(data.opponents || []);
+            } catch (e) {
+                root.innerHTML = `<p class="err-msg">${escapeHtml(e.message || String(e))}</p>`;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('btn-search')?.addEventListener('click', searchByName);
+            ['first-name', 'last-name'].forEach((id) => {
+                document.getElementById(id)?.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); searchByName(); }
+                });
+            });
+
+            loadOpponents();
+
+            document.getElementById('opponents-root').addEventListener('click', async (ev) => {
+                const saveBtn = ev.target.closest('.save-note-btn');
+                const removeBtn = ev.target.closest('.remove-btn');
+                if (saveBtn) {
+                    const id = saveBtn.getAttribute('data-id');
+                    const noteEl = document.querySelector(`[data-note-for="${id}"]`);
+                    const note = noteEl ? noteEl.value : '';
+                    try {
+                        const res = await apiFetch(`/api/fencers/tracked/${id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_note: note }),
+                        });
+                        const data = await res.json();
+                        if (!data.success) throw new Error(data.error || 'Save failed');
+                        saveBtn.textContent = 'Saved';
+                        setTimeout(() => { saveBtn.textContent = 'Save note'; }, 1500);
+                    } catch (e) {
+                        alert(e.message || String(e));
+                    }
+                }
+                if (removeBtn) {
+                    const id = removeBtn.getAttribute('data-id');
+                    if (!confirm('Remove this opponent from your list?')) return;
+                    try {
+                        const res = await apiFetch(`/api/fencers/tracked/${id}`, { method: 'DELETE' });
+                        const data = await res.json();
+                        if (!data.success) throw new Error(data.error || 'Remove failed');
+                        await loadOpponents();
+                    } catch (e) {
+                        alert(e.message || String(e));
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

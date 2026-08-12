@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime data (DO NOT bake into image)
+uploads/
+unlabeled/
+3d_outputs/
+
+# Git
+.git/
+.gitignore
+
+# Conda / venv
+.env
+.venv
+conda/
+miniconda/
+mmpose-env/
+
+# Logs
+*.log
+
+# Large media
+*.mp4
+*.mov
+*.avi
+
+# Training outputs (baked via aliceds/fencing-weights image, not app build context)
+mmpose/work_dirs/
+mmpose/.mim/
+**/.git/
+
+# Local checkpoint dumps (baked via fencing-weights image or Dockerfile.base curl)
+checkpoints/
+motionbert*.pth
+best_touch*.pth
+
+# Ephemeral weights staging for Dockerfile.weights
+weights-context/
+
+# ODTrack (vendor cloned in Dockerfile; weights via fencing-weights image)
+vendor/odtrack/
+models/odtrack/
+models/_odtrack_dl/
+

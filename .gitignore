@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Envs / secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+conda/
+mmpose-env/
+
+# Local runtime workspace (uploads, DB, outputs)
+local_workspace/
+uploads/
+unlabeled/
+3d_outputs/
+tmp/
+*.log
+
+# Media
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Ephemeral Docker staging (not needed in this package)
+weights-context/
+
+# Over GitHub LFS 2GB file limit — download with scripts/download_weights.ps1
+checkpoints/td-hm_ViTPose-huge_8xb64-210e_coco-256x192-e32adcd4_20230314.pth
+
+# Optional local mmpose checkout (prefer mim-installed mmpose)
+mmpose/work_dirs/
+mmpose/.mim/

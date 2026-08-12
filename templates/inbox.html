@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    {% set seo_title = "Messages – SmarterFencing" %}
+    {% set seo_robots = "noindex,nofollow" %}
+    {% include 'seo.html' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { font-family: var(--font-body); }
+        .inbox-layout { display: grid; gap: 16px; }
+        @media (min-width: 900px) {
+            .inbox-layout.has-thread { grid-template-columns: minmax(260px, 34%) 1fr; }
+        }
+        .thread-list-item { cursor: pointer; transition: background 0.15s; }
+        .thread-list-item:hover { background: rgba(255,255,255,0.06); }
+        .thread-list-item.active { background: rgba(20, 184, 166, 0.14); border-color: rgba(45, 212, 191, 0.4); }
+        .msg-bubble { max-width: 85%; }
+        .msg-mine { margin-left: auto; background: rgba(15, 118, 110, 0.4); }
+        .msg-theirs { margin-right: auto; background: rgba(24, 30, 40, 0.9); }
+        .inbox-tab-count {
+            margin-left: 0.35rem;
+            display: inline-flex;
+            min-width: 1.35rem;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.375rem;
+            background: rgba(55, 65, 81, 0.85);
+            padding: 0.1rem 0.45rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: #d1d5db;
+        }
+        .inbox-tab.is-active .inbox-tab-count {
+            background: rgba(255, 255, 255, 0.18);
+            color: #fff;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-white">
+    {% include 'header.html' %}
+
+    <main class="max-w-6xl mx-auto p-4 pt-4 lg:p-6">
+        <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h1 class="text-xl lg:text-2xl font-bold">Messages</h1>
+                <p class="text-sm text-gray-400">Shared analyses, touches, and coaching feedback</p>
+            </div>
+            <a href="{{ url_for('touch_share.profile_page') }}" class="text-sm text-sky-400 hover:text-sky-300">Profile & username</a>
+        </header>
+
+        <div id="inboxRoot" class="inbox-layout">
+            <section class="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+                <div class="flex border-b border-gray-700">
+                    <button type="button" id="tabSent" class="inbox-tab is-active flex-1 px-4 py-3 text-sm font-medium bg-blue-600/80">
+                        Sent <span id="tabSentCount" class="inbox-tab-count">0</span>
+                    </button>
+                    <button type="button" id="tabReceived" class="inbox-tab flex-1 px-4 py-3 text-sm font-medium text-gray-400 hover:bg-gray-700/50">
+                        Received <span id="tabReceivedCount" class="inbox-tab-count">0</span>
+                    </button>
+                </div>
+                <div id="threadList" class="max-h-[70vh] overflow-y-auto divide-y divide-gray-700/60">
+                    <p class="p-4 text-sm text-gray-500">Loading…</p>
+                </div>
+            </section>
+
+            <section id="threadPanel" class="hidden bg-gray-800 rounded-xl border border-gray-700 overflow-hidden flex flex-col min-h-[420px]">
+                <div id="threadHeader" class="p-4 border-b border-gray-700"></div>
+                <div id="threadVideoWrap" class="p-4 border-b border-gray-700 hidden">
+                    <video id="resultsVideo" class="w-full rounded-lg bg-black max-h-64" controls playsinline preload="metadata"></video>
+                    <div id="touchClipControls" class="flex flex-wrap items-center gap-2 mt-2">
+                        <button type="button" id="playTouchClipBtn" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium">Play touch</button>
+                        <span id="touchClipPhase" class="text-xs text-gray-400"></span>
+                    </div>
+                    <a id="threadResultsLink" href="#" class="hidden inline-block mt-2 text-sm text-violet-400 hover:text-violet-300">Open full analysis →</a>
+                </div>
+                <div id="messageList" class="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px]"></div>
+                <form id="replyForm" class="p-4 border-t border-gray-700 flex flex-col gap-2">
+                    <textarea id="replyInput" rows="2" maxlength="4000" placeholder="Add feedback…" class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm resize-y"></textarea>
+                    <div class="flex justify-end">
+                        <button type="submit" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 rounded-lg text-sm font-medium">Send</button>
+                    </div>
+                </form>
+            </section>
+        </div>
+
+        <p id="inboxEmpty" class="hidden mt-6 text-center text-gray-500 text-sm">Select a conversation or share an analysis from your results.</p>
+    </main>
+
+    <script src="{{ url_for('static', filename='header.js') }}"></script>
+    <script src="{{ url_for('static', filename='touch-player.js') }}"></script>
+    <script>
+        const INITIAL_SHARE_ID = {{ share_id|tojson }};
+        let activeTab = 'sent';
+        let activeShareId = null;
+        let threadTouchFrame = 0;
+        let threadFps = 30;
+        let sentItems = [];
+        let receivedItems = [];
+
+        function apiFetch(url, opts = {}) {
+            return fetch(url, { ...opts, credentials: 'same-origin' });
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+
+        function formatWhen(iso) {
+            if (!iso) return '';
+            try {
+                const d = new Date(iso);
+                return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            } catch (e) { return ''; }
+        }
+
+        function partyLabel(item) {
+            const tab = item.direction || activeTab;
+            if (tab === 'sent') {
+                const rs = item.recipients || [];
+                if (!rs.length) return 'To: No recipients';
+                const names = rs.map(partyUsername).join(', ');
+                return `To: ${names}`;
+            }
+            const f = item.from_user;
+            if (!f) return 'From: Unknown';
+            return `From: ${partyUsername(f)}`;
+        }
+
+        function partyUsername(r) {
+            if (r && r.username) return r.username;
+            return 'unknown';
+        }
+
+        function updateTabCounts() {
+            document.getElementById('tabSentCount').textContent = String(sentItems.length);
+            document.getElementById('tabReceivedCount').textContent = String(receivedItems.length);
+        }
+
+        function updateTabStyles() {
+            const sentBtn = document.getElementById('tabSent');
+            const recvBtn = document.getElementById('tabReceived');
+            const sentActive = activeTab === 'sent';
+            const recvActive = activeTab === 'received';
+            sentBtn.classList.toggle('is-active', sentActive);
+            sentBtn.classList.toggle('bg-blue-600/80', sentActive);
+            sentBtn.classList.toggle('text-gray-400', !sentActive);
+            recvBtn.classList.toggle('is-active', recvActive);
+            recvBtn.classList.toggle('bg-blue-600/80', recvActive);
+            recvBtn.classList.toggle('text-gray-400', !recvActive);
+        }
+
+        function renderList(items) {
+            const el = document.getElementById('threadList');
+            if (!items.length) {
+                el.innerHTML = `<p class="p-4 text-sm text-gray-500">No ${activeTab} shares yet.</p>`;
+                return;
+            }
+            el.innerHTML = items.map(item => `
+                <button type="button" class="thread-list-item w-full text-left p-4 border-l-2 border-transparent ${item.id === activeShareId ? 'active' : ''}" data-id="${esc(item.id)}">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            ${item.kind === 'analysis'
+                                ? `<p class="text-xs text-violet-300/90">Full analysis</p>`
+                                : (item.touch_ref ? `<p class="text-xs font-mono text-sky-400/90">${esc(item.touch_ref)}</p>` : '')}
+                            <p class="text-sm font-medium text-gray-100">${esc(item.touch_summary || (item.kind === 'analysis' ? 'Full bout analysis' : 'Touch'))}</p>
+                        </div>
+                        ${item.unread ? '<span class="shrink-0 w-2 h-2 rounded-full bg-sky-400 mt-1.5" title="Unread"></span>' : ''}
+                    </div>
+                    <p class="text-xs text-gray-400 mt-0.5">${esc(partyLabel(item))}</p>
+                    ${item.prediction ? `<p class="text-xs text-gray-500 mt-1 uppercase">${esc(item.prediction)}</p>` : ''}
+                    <p class="text-xs text-gray-500 mt-1 truncate">${esc((item.last_message && item.last_message.body) || 'No messages')}</p>
+                    <p class="text-[10px] text-gray-600 mt-1">${formatWhen(item.last_message && item.last_message.created_at || item.created_at)}</p>
+                </button>
+            `).join('');
+            el.querySelectorAll('[data-id]').forEach(btn => {
+                btn.addEventListener('click', () => openThread(btn.getAttribute('data-id')));
+            });
+        }
+
+        async function loadList() {
+            const [sentRes, recvRes] = await Promise.all([
+                apiFetch('/api/touch-shares/sent'),
+                apiFetch('/api/touch-shares/received'),
+            ]);
+            const sentData = await sentRes.json();
+            const recvData = await recvRes.json();
+            if (!sentData.success || !recvData.success) {
+                throw new Error(
+                    (sentData.error || recvData.error || 'Could not load')
+                );
+            }
+            sentItems = sentData.shares || [];
+            receivedItems = recvData.shares || [];
+            updateTabCounts();
+            renderList(activeTab === 'sent' ? sentItems : receivedItems);
+        }
+
+        async function openThread(shareId) {
+            activeShareId = shareId;
+            history.replaceState({}, '', `/inbox/${shareId}`);
+            document.getElementById('inboxRoot').classList.add('has-thread');
+            document.getElementById('threadPanel').classList.remove('hidden');
+            document.getElementById('inboxEmpty').classList.add('hidden');
+
+            const res = await apiFetch(`/api/touch-shares/${encodeURIComponent(shareId)}`);
+            const data = await res.json();
+            if (!data.success) {
+                alert(data.error || 'Could not open thread');
+                return;
+            }
+
+            const share = data.share;
+            const touch = data.touch;
+            const isAnalysis = (share.kind || touch.kind) === 'analysis';
+            const header = document.getElementById('threadHeader');
+            header.innerHTML = `
+                ${isAnalysis
+                    ? `<p class="text-xs text-violet-300/90">Full bout analysis</p>`
+                    : (share.touch_ref ? `<p class="text-xs font-mono text-sky-400/90">Touch ID: ${esc(share.touch_ref)}</p>` : '')}
+                <p class="font-semibold">${esc(share.touch_summary || (isAnalysis ? 'Full bout analysis' : 'Touch'))}</p>
+                <p class="text-xs text-gray-400 mt-1">${esc(partyLabel(share))}</p>
+                ${share.filename ? `<p class="text-xs text-gray-500 mt-1">${esc(share.filename)}</p>` : ''}
+            `;
+
+            const video = document.getElementById('resultsVideo');
+            const videoWrap = document.getElementById('threadVideoWrap');
+            const clipControls = document.getElementById('touchClipControls');
+            const resultsLink = document.getElementById('threadResultsLink');
+            if (touch && touch.video_url) {
+                videoWrap.classList.remove('hidden');
+                video.src = touch.video_url;
+                if (isAnalysis) {
+                    clipControls.classList.add('hidden');
+                    if (touch.results_url) {
+                        resultsLink.href = touch.results_url;
+                        resultsLink.classList.remove('hidden');
+                    } else {
+                        resultsLink.classList.add('hidden');
+                    }
+                } else {
+                    resultsLink.classList.add('hidden');
+                    clipControls.classList.remove('hidden');
+                    const pred = (touch.prediction || touch.predictions && touch.predictions[0]) || {};
+                    const touchId = touch.touch_id || pred.touch || '';
+                    const fm = touchId.match(/frame(\d+)/);
+                    threadTouchFrame = fm ? parseInt(fm[1], 10) : 0;
+                    threadFps = touch.fps || 30;
+                    TouchClip.onTouchSelected(threadTouchFrame, threadFps);
+                }
+            } else {
+                videoWrap.classList.add('hidden');
+                resultsLink.classList.add('hidden');
+            }
+
+            renderMessages(data.messages || []);
+            await loadList();
+            if (typeof window.refreshNavMessagesUnread === 'function') {
+                window.refreshNavMessagesUnread();
+            }
+        }
+
+        function renderMessages(messages) {
+            const el = document.getElementById('messageList');
+            el.innerHTML = messages.map(m => {
+                const author = m.author || {};
+                const name = author.display_name || 'User';
+                const handle = author.username ? `@${author.username}` : '';
+                return `
+                    <div class="msg-bubble rounded-xl px-3 py-2 text-sm ${m.is_mine ? 'msg-mine' : 'msg-theirs'}">
+                        <p class="text-[10px] text-gray-400 mb-1">${esc(name)}${handle ? ' ' + esc(handle) : ''} · ${formatWhen(m.created_at)}</p>
+                        <p class="whitespace-pre-wrap">${esc(m.body)}</p>
+                    </div>
+                `;
+            }).join('');
+            el.scrollTop = el.scrollHeight;
+        }
+
+        document.getElementById('playTouchClipBtn').addEventListener('click', () => {
+            TouchClip.playSelectedTouchClip();
+        });
+
+        document.getElementById('replyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!activeShareId) return;
+            const input = document.getElementById('replyInput');
+            const body = (input.value || '').trim();
+            if (!body) return;
+            const res = await apiFetch(`/api/touch-shares/${encodeURIComponent(activeShareId)}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ body }),
+            });
+            const data = await res.json();
+            if (!data.success) {
+                alert(data.error || 'Send failed');
+                return;
+            }
+            input.value = '';
+            await openThread(activeShareId);
+        });
+
+        async function setTab(tab) {
+            activeTab = tab;
+            updateTabStyles();
+            try {
+                await loadList();
+            } catch (err) {
+                document.getElementById('threadList').innerHTML = `<p class="p-4 text-red-400 text-sm">${esc(err.message)}</p>`;
+            }
+        }
+
+        document.getElementById('tabSent').addEventListener('click', () => setTab('sent'));
+        document.getElementById('tabReceived').addEventListener('click', () => setTab('received'));
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const me = await apiFetch('/api/auth/me');
+                const auth = await me.json();
+                if (!auth.logged_in) {
+                    document.getElementById('inboxRoot').innerHTML = `
+                        <div class="auth-prompt text-center p-8 bg-gray-800 rounded-xl border border-gray-700">
+                            <p class="text-gray-300">Sign in to view shared analyses, touches, and feedback.</p>
+                            <p class="mt-3"><a href="/demo#sign-in" class="text-sky-400 font-medium">Sign in</a></p>
+                        </div>`;
+                    return;
+                }
+                await setTab('sent');
+                if (INITIAL_SHARE_ID) {
+                    await openThread(INITIAL_SHARE_ID);
+                } else if (window.innerWidth >= 900) {
+                    document.getElementById('inboxEmpty').classList.remove('hidden');
+                }
+            } catch (err) {
+                document.getElementById('threadList').innerHTML = `<p class="p-4 text-red-400 text-sm">${esc(err.message)}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>
