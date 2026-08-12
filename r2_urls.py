@@ -20,9 +20,9 @@ def get_r2_public_base_url() -> str:
     """
     Public base URL for R2 objects.
 
-    Set R2_PUBLIC_URL to the exact host shown in the Cloudflare R2 portal
-    (e.g. https://pub-d2648056ec514bdea3d1935baa03c098.r2.dev).
-    Do not derive this from R2_ACCOUNT_ID — the pub-* hash is bucket-specific.
+    Set R2_PUBLIC_URL to the exact public base shown in the Cloudflare R2 portal
+    (e.g. https://pub-xxxxxxxx.r2.dev). Do not derive this from R2_ACCOUNT_ID —
+    the pub-* hash is bucket-specific.
     """
     r2_public_url = (os.environ.get("R2_PUBLIC_URL") or "").strip()
     if r2_public_url:

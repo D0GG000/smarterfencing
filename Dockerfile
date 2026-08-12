@@ -1,6 +1,6 @@
 # App image (thin): Flask app + tunnel on top of fencing-base + fencing-weights.
-ARG FENCING_BASE_IMAGE=aliceds/fencing-base:latest
-ARG FENCING_WEIGHTS_IMAGE=aliceds/fencing-weights:latest
+ARG FENCING_BASE_IMAGE=YOUR_DOCKERHUB/fencing-base:latest
+ARG FENCING_WEIGHTS_IMAGE=YOUR_DOCKERHUB/fencing-weights:latest
 
 FROM ${FENCING_WEIGHTS_IMAGE} AS fencing_weights
 FROM ${FENCING_BASE_IMAGE}

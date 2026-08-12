@@ -734,14 +734,15 @@ def job_status(job_id):
 # -------------------------
 from functools import wraps
 
-ADMIN_TOKEN = os.environ.get('ADMIN_TOKEN', 'your-secret-token')
+ADMIN_TOKEN = (os.environ.get('ADMIN_TOKEN') or '').strip()
 
 def require_admin(f):
     from functools import wraps
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.args.get("token")
-        if token != os.environ.get("ADMIN_TOKEN"):
+        expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+        token = request.args.get("token") or ""
+        if not expected or token != expected:
             return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return decorated
@@ -937,8 +938,9 @@ def admin_jobs():
     """Get recent jobs (bounded list + total count)."""
     from sqlalchemy import func
 
-    token = request.args.get("token")
-    if token != os.environ.get("ADMIN_TOKEN"):
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    token = request.args.get("token") or ""
+    if not expected or token != expected:
         return jsonify({"error": "Unauthorized"}), 401
 
     limit = _admin_list_limit()
@@ -972,8 +974,9 @@ def admin_jobs():
 @app.get("/api/admin/queue-live")
 def admin_queue_live():
     """Live queue snapshot (worker state + waiting jobs)."""
-    token = request.args.get("token")
-    if token != os.environ.get("ADMIN_TOKEN"):
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    token = request.args.get("token") or ""
+    if not expected or token != expected:
         return jsonify({"error": "Unauthorized"}), 401
 
     from queue_state import get_admin_queue_snapshot
@@ -987,8 +990,9 @@ def admin_delete_job(job_id):
     from job_queue_worker import get_current_job_id
     from admin_tasks import delete_job_r2_objects, enqueue_admin_task
 
-    token = request.args.get("token")
-    if token != os.environ.get("ADMIN_TOKEN"):
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    token = request.args.get("token") or ""
+    if not expected or token != expected:
         return jsonify({"error": "Unauthorized"}), 401
 
     job = UserJob.query.filter_by(job_id=job_id).first()
@@ -1139,8 +1143,9 @@ def admin_result_url(job_id):
     import json
     from urllib.parse import urlencode
 
-    token = request.args.get("token")
-    if token != os.environ.get("ADMIN_TOKEN"):
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    token = request.args.get("token") or ""
+    if not expected or token != expected:
         return jsonify({"error": "Unauthorized"}), 401
 
     # Get the job from database

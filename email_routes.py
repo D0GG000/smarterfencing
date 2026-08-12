@@ -7,7 +7,7 @@ Environment variables required:
 - GMAIL_USER: Gmail address (e.g., smarterfencing.ai@gmail.com)
 - GMAIL_APP_PASSWORD: 16-character app password from Google
 - R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET: R2 credentials
-- R2_PUBLIC_URL: public bucket base from Cloudflare portal (e.g. https://pub-d2648056....r2.dev)
+- R2_PUBLIC_URL: public bucket base from Cloudflare portal (e.g. https://pub-xxxxxxxx.r2.dev)
 """
 
 import os

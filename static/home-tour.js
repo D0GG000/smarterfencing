@@ -594,17 +594,36 @@
       window.DEMO_SHARE_TOKEN ||
       DEFAULT_TOKEN
     ).trim();
-    var shareUrl = '/result?share=' + encodeURIComponent(token);
+    var shareUrl = token
+      ? '/result?share=' + encodeURIComponent(token)
+      : '/demo';
     try {
-      var res = await fetch(
-        '/api/queue/shared-results/' +
-          encodeURIComponent(token) +
-          '?lite=1',
-        { credentials: 'same-origin' }
-      );
-      var data = await res.json();
-      if (!res.ok || !data.success || !data.results) {
-        throw new Error((data && data.error) || 'Could not load demo bout');
+      var data = null;
+      if (token) {
+        try {
+          var res = await fetch(
+            '/api/queue/shared-results/' +
+              encodeURIComponent(token) +
+              '?lite=1',
+            { credentials: 'same-origin' }
+          );
+          var remote = await res.json();
+          if (res.ok && remote && remote.success && remote.results) {
+            data = remote;
+          }
+        } catch (_remoteErr) {
+          /* fall through to bundled demo */
+        }
+      }
+      if (!data) {
+        var localRes = await fetch('/static/demo/home-tour-results.json', {
+          credentials: 'same-origin',
+        });
+        data = await localRes.json();
+        if (!localRes.ok || !data || !data.success || !data.results) {
+          throw new Error((data && data.error) || 'Could not load demo bout');
+        }
+        shareUrl = '/demo';
       }
       var built = buildPanels(data, shareUrl);
       initTour(root, built);

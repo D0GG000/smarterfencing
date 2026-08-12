@@ -33,6 +33,7 @@ tmp/
 *.avi
 *.mkv
 *.webm
+!static/demo/home-tour-bout.mp4
 
 # OS / editor
 .DS_Store

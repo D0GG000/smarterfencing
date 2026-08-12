@@ -274,7 +274,7 @@ def send_completion_email(job):
         if not video_url and job.r2_object_key:
             log(
                 "No video URL for email: set R2_PUBLIC_URL to your R2 portal public host "
-                "(e.g. https://pub-d2648056ec514bdea3d1935baa03c098.r2.dev)"
+                "(e.g. https://pub-xxxxxxxx.r2.dev)"
             )
 
         # Send email

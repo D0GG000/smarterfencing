@@ -2,6 +2,7 @@ from lib.test.evaluation.environment import EnvSettings
 
 def local_env_settings():
     settings = EnvSettings()
-    settings.prj_dir = r'/home/jordan/fencing-mmpose-dev3/app/vendor/odtrack'
-    settings.save_dir = r'/home/jordan/fencing-mmpose-dev3/app/models/odtrack'
+    # Filled relative to this checkout by setup_odtrack.write_local_py()
+    settings.prj_dir = r'vendor/odtrack'
+    settings.save_dir = r'models/odtrack'
     return settings
